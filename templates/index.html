@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stock Data Collector &amp; Briefing Tool</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <div class="container">
+    <!-- 상단 헤더 & 검색 구역 -->
+    <header class="header">
+      <h1>📈 종목 데이터 수집 &amp; 브리핑 도구</h1>
+      <p class="subtitle">6자리 종목코드를 입력하면 네이버 금융 시세·재무 실적과 최신 뉴스를 한눈에 수집합니다.</p>
+    </header>
+
+    <section class="search-section">
+      <form id="search-form" class="search-form">
+        <input
+          type="text"
+          id="stock-code"
+          name="code"
+          placeholder="6자리 종목코드 입력 (예: 000660)"
+          maxlength="6"
+          autocomplete="off"
+          required
+        />
+        <button type="submit" id="fetch-btn">데이터 수집</button>
+      </form>
+      <div class="quick-examples">
+        <span>빠른 입력:</span>
+        <button type="button" class="example-btn" data-code="000660">SK하이닉스 (000660)</button>
+        <button type="button" class="example-btn" data-code="005930">삼성전자 (005930)</button>
+        <button type="button" class="example-btn" data-code="035420">NAVER (035420)</button>
+      </div>
+    </section>
+
+    <!-- 로딩 및 오류 안내 구역 -->
+    <div id="loading-box" class="loading-box hidden">
+      데이터를 수집하는 중입니다... 잠시만 기다려 주세요.
+    </div>
+    <div id="error-box" class="error-box hidden"></div>
+
+    <!-- 수집 결과 메인 구역 -->
+    <main id="result-container" class="result-container hidden">
+      <div class="stock-title-bar">
+        <h2 id="stock-name">-</h2>
+        <span id="stock-code-badge" class="code-badge">000000</span>
+      </div>
+
+      <!-- 구역 1: 스냅샷 카드 -->
+      <section class="card-section">
+        <h3>1. 핵심 투자 지표 (Snapshot)</h3>
+        <div class="snapshot-grid">
+          <div class="stat-card">
+            <span class="stat-label">현재가</span>
+            <strong id="val-price" class="stat-value">-</strong>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">등락률</span>
+            <strong id="val-change" class="stat-value">-</strong>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">시가총액</span>
+            <strong id="val-cap" class="stat-value">-</strong>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">PER</span>
+            <strong id="val-per" class="stat-value">-</strong>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">PBR</span>
+            <strong id="val-pbr" class="stat-value">-</strong>
+          </div>
+        </div>
+      </section>
+
+      <!-- 구역 2: 기업실적분석 표 -->
+      <section class="card-section">
+        <h3>2. 연간 기업실적분석 (Financials)</h3>
+        <div class="table-wrapper">
+          <table class="finance-table">
+            <thead>
+              <tr>
+                <th>기간</th>
+                <th>구분</th>
+                <th>매출액</th>
+                <th>영업이익</th>
+                <th>ROE (%)</th>
+              </tr>
+            </thead>
+            <tbody id="finance-tbody">
+              <!-- JS로 동적 렌더링 -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 구역 3: 최신 관련 뉴스 리스트 -->
+      <section class="card-section">
+        <h3>3. 최신 관련 뉴스 (Serper News API)</h3>
+        <ul id="news-list" class="news-list">
+          <!-- JS로 동적 렌더링 -->
+        </ul>
+      </section>
+    </main>
+  </div>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

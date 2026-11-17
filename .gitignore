@@ -1,0 +1,19 @@
+# 환경변수 및 비밀키 보호 (절대 깃에 올리지 않음)
+.env
+
+# 가상환경
+venv/
+env/
+
+# 파이썬 바이트코드 캐시
+__pycache__/
+*.py[cod]
+*$py.class
+
+# OS 생성 파일
+.DS_Store
+Thumbs.db
+
+# VS Code / IDE 설정
+.vscode/
+.idea/
