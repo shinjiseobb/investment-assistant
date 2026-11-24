@@ -766,6 +766,7 @@ document.addEventListener("DOMContentLoaded", () => {
       },
       options: {
         responsive: true,
+        aspectRatio: window.innerWidth <= 768 ? 1.25 : 1.8,
         scales: {
           x: { title: { display: true, text: "연율화 변동성 리스크 (%)" } },
           y: { title: { display: true, text: "연율화 기대수익률 (%)" } },
@@ -880,6 +881,7 @@ document.addEventListener("DOMContentLoaded", () => {
       },
       options: {
         responsive: true,
+        aspectRatio: window.innerWidth <= 768 ? 1.2 : 1.8,
         interaction: { mode: "index", intersect: false },
         plugins: { legend: { position: "bottom" } },
       },
@@ -899,6 +901,7 @@ document.addEventListener("DOMContentLoaded", () => {
       },
       options: {
         responsive: true,
+        aspectRatio: window.innerWidth <= 768 ? 1.35 : 1.8,
         scales: { y: { min: 0, max: 100 } },
         plugins: { legend: { position: "bottom" } },
       },

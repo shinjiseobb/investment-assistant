@@ -823,3 +823,118 @@ input:disabled {
   color: #ffffff;
   border-color: #0f172a;
 }
+
+/* ==================== 모바일 전용 최적화 (데스크탑 유지) ==================== */
+@media (max-width: 768px) {
+  .top-navbar {
+    position: static;
+  }
+
+  .nav-inner {
+    padding: 10px 14px 0;
+    gap: 8px;
+  }
+
+  .brand-area {
+    order: 1;
+  }
+
+  .test-link {
+    order: 2;
+    font-size: 0.78rem;
+    padding: 4px 8px;
+  }
+
+  .tab-nav {
+    order: 3;
+    width: 100%;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    gap: 4px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .tab-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tab-btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    padding: 10px 12px;
+    font-size: 0.86rem;
+  }
+
+  .container {
+    padding: 14px 12px 36px;
+  }
+
+  .card-section {
+    padding: 16px 14px;
+  }
+
+  .search-panel {
+    padding: 14px;
+  }
+
+  .market-ticker-strip {
+    padding: 10px 12px;
+    gap: 6px 12px;
+    font-size: 0.8rem;
+  }
+
+  .stock-title-bar h2 {
+    font-size: 1.3rem;
+  }
+
+  .snapshot-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .inline-form .autocomplete-wrapper {
+    flex: 1 1 100%;
+  }
+
+  .inline-form .mode-select,
+  .inline-form .primary-btn {
+    flex: 1;
+  }
+
+  .screener-filters {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .screener-filters input[type="text"],
+  .screener-filters button {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .finance-table th,
+  .finance-table td {
+    white-space: nowrap;
+    padding: 8px 10px;
+    font-size: 0.8rem;
+  }
+
+  .charts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .chart-card {
+    padding: 14px 10px;
+  }
+
+  .report-box {
+    padding: 14px;
+    font-size: 0.9rem;
+  }
+
+  .chat-msg {
+    max-width: 94%;
+  }
+}
