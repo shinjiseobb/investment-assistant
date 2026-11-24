@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 import requests
 import FinanceDataReader as fdr
 from dotenv import load_dotenv
-from dart_client import fetch_dart_disclosures
+from dart_client import fetch_dart_disclosures, fetch_dart_latest_financials
 
 load_dotenv()
 
@@ -437,6 +437,7 @@ def collect_stock_data(code):
         "market_context": {},
         "tech_summary": None,
         "financials": [],
+        "dart_latest_financials": None,
         "disclosures": [],
         "news": [],
         "errors": [],
@@ -488,6 +489,12 @@ def collect_stock_data(code):
             result["errors"].append(err)
         else:
             result["disclosures"] = disclosures
+
+        dart_fin, err = fetch_dart_latest_financials(valid_code)
+        if err:
+            result["errors"].append(err)
+        else:
+            result["dart_latest_financials"] = dart_fin
 
     # 네이버에서 파싱한 정식 종목명으로 Serper News API 호출
     if result["name"]:

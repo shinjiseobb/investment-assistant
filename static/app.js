@@ -348,6 +348,30 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
 
+    // 주식용: DART 최신 확정 분기 실적 및 재무상태
+    const dartFinBox = document.getElementById("tab1-dart-fin-box");
+    const dartFinTitle = document.getElementById("tab1-dart-fin-title");
+    const dartFinBadges = document.getElementById("tab1-dart-fin-badges");
+    const df = ev.dart_latest_financials;
+    if (ev.asset_type !== "etf" && df) {
+      dartFinTitle.textContent = `🏛️ DART 최신 확정 실적 및 재무상태 (${df.period_label || "-"})`;
+      const dfItems = [
+        `당기 매출: ${formatKoreanCurrency(df.revenue_q)}`,
+        `누적 매출: ${formatKoreanCurrency(df.revenue_cum)}`,
+        `당기 영업이익: ${formatKoreanCurrency(df.operating_income_q)}`,
+        `누적 영업이익: ${formatKoreanCurrency(df.operating_income_cum)}`,
+        `당기 순이익: ${formatKoreanCurrency(df.net_income_q)}`,
+        `자산총계: ${formatKoreanCurrency(df.total_assets)}`,
+        `부채총계: ${formatKoreanCurrency(df.total_liabilities)}`,
+        `자본총계: ${formatKoreanCurrency(df.total_equity)}`,
+      ];
+      dartFinBadges.innerHTML = dfItems.map((t) => `<span class="ind-badge">${escapeHtml(t)}</span>`).join("");
+      dartFinBox.classList.remove("hidden");
+    } else {
+      dartFinBox.classList.add("hidden");
+      dartFinBadges.innerHTML = "";
+    }
+
     // 공통: 최근 5일 투자자별 매매동향 (수급)
     const trendTbody = document.getElementById("tab1-trend-tbody");
     trendTbody.innerHTML = "";

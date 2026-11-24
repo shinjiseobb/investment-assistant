@@ -87,8 +87,9 @@ EXPERT_ANALYSIS_PROMPT = """당신은 여의도 수석 애널리스트입니다.
    - 먼저 오늘의 시장 환경(`market_context`: 코스피·코스닥·원/달러 환율) 및 동일업종 경쟁사(`peers`) 등락률과 비교해 이 종목의 상대적 강도/방어력을 짚어주세요.
    - 일반 주식(`asset_type=stock`)이면 현재가, 등락률, 시가총액, PER·PBR 수준을 해석하세요.
    - ETF(`asset_type=etf`)이면 현재가, 등락률, 시가총액, NAV, 괴리율, 펀드보수, 분배금 수익률, 기초지수를 해석하세요.
-2. **실적 추이 / ETF 성과 · 수급(억원) · 기술적 위치**
-   - 일반 주식은 매출액·영업이익·ROE 추이(추정치 포함), ETF는 1·3·6·12개월 기간별 수익률 흐름을 설명하세요.
+2. **실적 추이(네이버 연간 + DART 확정 분기 교차 검증) · 수급(억원) · 기술적 위치**
+   - 일반 주식은 네이버 연간 매출·영업이익·ROE 추이(추정치 포함)와 **DART 최신 확정 분기 누적 실적(`dart_latest_financials`)**을 교차 비교해 연간 추정치 달성 가능성(진도율)과 자산·부채 체력을 함께 진단하세요.
+   - ETF는 1·3·6·12개월 기간별 수익률 흐름을 설명하세요.
    - 최근 5거래일 외국인·기관·개인 순매수 금액(`억원` 단위 포함) 동향을 짚어주세요.
    - 기술지표 요약(`tech_summary`: RSI14, 볼린저밴드 내 위치 %, 20일선 이격도)으로 현재 주가가 단기 과열/바닥 구간인지 함께 해석하세요.
 3. **최신 뉴스 및 DART 주요 전자공시 모멘텀** (수집된 뉴스 및 최근 3개월 DART 공시 기반 주요 이슈 요약)
@@ -134,6 +135,7 @@ def chat_analyze():
         "etf_info": evidence.get("etf_info"),
         "investor_trend": evidence.get("investor_trend", []),
         "financials": evidence["financials"],
+        "dart_latest_financials": evidence.get("dart_latest_financials"),
         "disclosures": evidence.get("disclosures", []),
         "news": evidence["news"],
     }

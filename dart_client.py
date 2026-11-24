@@ -156,3 +156,97 @@ def fetch_dart_disclosures(stock_code, days=90, limit=8):
 
     logger.info("[DART] 공시 수집 완료 (stock_code=%s, count=%d)", stock_code, len(disclosures))
     return disclosures, None
+
+
+def _parse_dart_amount(val):
+    """DART 금액 문자열('104,615,483,000,000')을 순수 정수로 변환한다."""
+    if val is None:
+        return None
+    text = str(val).strip().replace(",", "")
+    if not text or text in ("-", "N/A"):
+        return None
+    try:
+        return int(float(text))
+    except ValueError:
+        return None
+
+
+def fetch_dart_latest_financials(stock_code):
+    """OpenDART fnlttSinglAcnt.json에서 가장 최신 확정 분기(또는 사업)보고서의 실적과 자산/부채를 가져온다."""
+    api_key = _get_dart_api_key()
+    if not api_key:
+        return None, None
+
+    corp_map = _load_corp_code_map(api_key)
+    corp_code = corp_map.get(str(stock_code).strip())
+    if not corp_code:
+        return None, None
+
+    curr_year = datetime.today().year
+    candidates = [
+        (str(curr_year), "11014", f"{curr_year}년 3분기"),
+        (str(curr_year), "11012", f"{curr_year}년 반기"),
+        (str(curr_year), "11013", f"{curr_year}년 1분기"),
+        (str(curr_year - 1), "11011", f"{curr_year - 1}년 사업보고서"),
+    ]
+
+    url = "https://opendart.fss.or.kr/api/fnlttSinglAcnt.json"
+
+    for bsns_year, reprt_code, label in candidates:
+        try:
+            resp = requests.get(
+                url,
+                params={
+                    "crtfc_key": api_key,
+                    "corp_code": corp_code,
+                    "bsns_year": bsns_year,
+                    "reprt_code": reprt_code,
+                },
+                timeout=DART_TIMEOUT,
+            )
+            data = resp.json()
+        except Exception as e:
+            logger.warning("[DART] 재무제표 조회 예외 (%s %s): %s", bsns_year, reprt_code, e)
+            continue
+
+        if data.get("status") != "000" or not data.get("list"):
+            continue
+
+        rows = data["list"]
+        # 연결재무제표(CFS) 우선, 없으면 개별재무제표(OFS) 사용
+        cfs_rows = [r for r in rows if r.get("fs_div") == "CFS"]
+        target_rows = cfs_rows if cfs_rows else [r for r in rows if r.get("fs_div") == "OFS"]
+        fs_label = "연결" if cfs_rows else "개별"
+
+        if not target_rows:
+            continue
+
+        acct_map = {}
+        for r in target_rows:
+            nm = (r.get("account_nm") or "").strip()
+            if nm and nm not in acct_map:
+                acct_map[nm] = r
+
+        rev_row = acct_map.get("매출액") or acct_map.get("수익(매출액)") or acct_map.get("영업수익") or {}
+        op_row = acct_map.get("영업이익") or acct_map.get("영업이익(손실)") or {}
+        net_row = acct_map.get("당기순이익") or acct_map.get("당기순이익(손실)") or {}
+        asset_row = acct_map.get("자산총계") or {}
+        liab_row = acct_map.get("부채총계") or {}
+        eq_row = acct_map.get("자본총계") or {}
+
+        result = {
+            "period_label": f"{label} ({fs_label})",
+            "revenue_q": _parse_dart_amount(rev_row.get("thstrm_amount")),
+            "revenue_cum": _parse_dart_amount(rev_row.get("thstrm_add_amount")),
+            "operating_income_q": _parse_dart_amount(op_row.get("thstrm_amount")),
+            "operating_income_cum": _parse_dart_amount(op_row.get("thstrm_add_amount")),
+            "net_income_q": _parse_dart_amount(net_row.get("thstrm_amount")),
+            "total_assets": _parse_dart_amount(asset_row.get("thstrm_amount")),
+            "total_liabilities": _parse_dart_amount(liab_row.get("thstrm_amount")),
+            "total_equity": _parse_dart_amount(eq_row.get("thstrm_amount")),
+        }
+
+        logger.info("[DART] 최신 확정 재무 수집 완료 (stock_code=%s, period=%s)", stock_code, result["period_label"])
+        return result, None
+
+    return None, None
