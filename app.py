@@ -158,7 +158,6 @@ def chat_analyze():
         inputs={
             "stock_code": evidence["code"],
             "stock_name": evidence["name"],
-            "stock_data": context_text,
         },
         context_text=context_text if (is_initial or not conversation_id) else None,
         conversation_id=conversation_id,

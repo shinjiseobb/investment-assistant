@@ -81,10 +81,17 @@ def ask_dify_chatbot(bot_type, query, inputs=None, context_text=None, conversati
 
     if resp.status_code != 200:
         logger.error("[ERROR] Dify 챗봇 API 오류 (bot=%s, status=%s, body=%s)", bot_type, resp.status_code, resp.text[:300])
+        detail_msg = ""
+        try:
+            err_json = resp.json()
+            if err_json.get("message"):
+                detail_msg = f" - {err_json['message']}"
+        except ValueError:
+            pass
         return {
             "answer": None,
             "conversation_id": conversation_id,
-            "error": f"{bot_label} 응답 오류가 발생했습니다 (상태 코드: {resp.status_code}).",
+            "error": f"{bot_label} 응답 오류가 발생했습니다 (상태 코드: {resp.status_code}{detail_msg}).",
         }
 
     try:

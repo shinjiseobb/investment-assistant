@@ -81,9 +81,9 @@ document.addEventListener("DOMContentLoaded", () => {
         body: JSON.stringify({ code }),
       });
 
-      const evData = await fetchResp.json();
+      const evData = await safeParseJson(fetchResp);
       if (!evData || !evData.name) {
-        const errMsg = (evData && evData.errors && evData.errors[0]) || "종목 정보를 찾을 수 없습니다.";
+        const errMsg = (evData && evData.errors && evData.errors[0]) || `데이터 수집에 실패했습니다 (상태 코드: ${fetchResp.status}).`;
         console.error("[ERROR] 탭1 수집 오류:", errMsg);
         tab1Error.textContent = `⚠️ ${errMsg}`;
         tab1Error.classList.remove("hidden");
@@ -109,8 +109,17 @@ document.addEventListener("DOMContentLoaded", () => {
         }),
       });
 
-      const data = await analyzeResp.json();
+      const data = await safeParseJson(analyzeResp);
       loadingBubble.remove();
+
+      if (!data) {
+        const fallbackErr = `AI 서버 응답을 해석할 수 없습니다 (상태 코드: ${analyzeResp.status}).`;
+        console.error("[ERROR] 탭1 AI 분석 오류:", fallbackErr);
+        tab1Error.textContent = `⚠️ ${fallbackErr}`;
+        tab1Error.classList.remove("hidden");
+        appendChatMessage(tab1ChatLog, `안내: ${fallbackErr}`, "bot");
+        return;
+      }
 
       if (data.error) {
         console.error("[ERROR] 탭1 AI 분석 오류:", data.error);
@@ -739,6 +748,14 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // ==================== 공통 유틸리티 ====================
+  async function safeParseJson(resp) {
+    try {
+      return await resp.json();
+    } catch {
+      return null;
+    }
+  }
+
   function appendChatMessage(container, text, role) {
     const div = document.createElement("div");
     div.className = `chat-msg ${role}`;

@@ -1,4 +1,5 @@
 import io
+import json
 import logging
 import os
 import zipfile
@@ -25,10 +26,20 @@ def _get_dart_api_key():
 
 
 def _load_corp_code_map(api_key):
-    """OpenDART corpCode.xml ZIP을 받아 6자리 종목코드 -> 8자리 고유번호 매핑을 캐시한다."""
+    """로컬 dart_corp_codes.json 캐시(0.002초)를 우선 읽고, 없을 때만 OpenDART corpCode.xml을 다운로드한다."""
     global _CORP_CODE_MAP
     if _CORP_CODE_MAP:
         return _CORP_CODE_MAP
+
+    cache_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dart_corp_codes.json")
+    if os.path.exists(cache_path):
+        try:
+            with open(cache_path, "r", encoding="utf-8") as f:
+                _CORP_CODE_MAP = json.load(f)
+                logger.info("[DART] 로컬 고유번호 캐시(dart_corp_codes.json) 로드 완료 (%d개)", len(_CORP_CODE_MAP))
+                return _CORP_CODE_MAP
+        except Exception as e:
+            logger.warning("[DART] 로컬 캐시 로드 실패, 원격 다운로드 시도: %s", e)
 
     url = "https://opendart.fss.or.kr/api/corpCode.xml"
     logger.info("[DART] 고유번호(corpCode.xml) 매핑 목록 다운로드 시작")
