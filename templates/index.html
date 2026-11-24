@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>나의 투자도우미 (My Investment Assistant)</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>" />
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -33,6 +34,10 @@
         <h3>💬 1단계: 종목 조회 및 AI 전문가 심층분석</h3>
         <form id="tab1-load-form" class="inline-form">
           <input type="text" id="tab1-code" placeholder="종목코드 6자리 (예: 000660)" maxlength="6" value="000660" required />
+          <select id="tab1-mode-select" class="mode-select" aria-label="분석 모드 선택">
+            <option value="expert">📊 전문가용 상세 리포트</option>
+            <option value="beginner">🌱 초보자용 쉬운 해설</option>
+          </select>
           <button type="submit" id="tab1-load-btn">종목 조회 &amp; AI 분석 시작</button>
         </form>
         <div class="quick-examples" style="margin-bottom: 14px;">

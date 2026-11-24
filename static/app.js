@@ -28,6 +28,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // ==================== 2. 탭 1: 종목 조회 → 자동 분석 → 후속 채팅 ====================
   const tab1LoadForm = document.getElementById("tab1-load-form");
   const tab1CodeInput = document.getElementById("tab1-code");
+  const tab1ModeSelect = document.getElementById("tab1-mode-select");
   const tab1LoadBtn = document.getElementById("tab1-load-btn");
   const tab1Error = document.getElementById("tab1-error");
   const tab1Loading = document.getElementById("tab1-loading");
@@ -43,8 +44,27 @@ document.addEventListener("DOMContentLoaded", () => {
   let tab1CurrentCode = "";
   let tab1ConversationId = "";
   let tab1EvidenceData = null;
-  let tab1CurrentMode = "expert";
+  let tab1CurrentMode = tab1ModeSelect ? tab1ModeSelect.value : "expert";
   let tab1Reports = { expert: null, beginner: null };
+
+  function syncModeUI(mode) {
+    tab1CurrentMode = mode;
+    if (tab1ModeSelect) tab1ModeSelect.value = mode;
+    modeBtns.forEach((b) => b.classList.toggle("active", b.getAttribute("data-mode") === mode));
+  }
+
+  // 상단 조회 폼 옆 셀렉트 박스 변경 시 동기화
+  if (tab1ModeSelect) {
+    tab1ModeSelect.addEventListener("change", async () => {
+      const targetMode = tab1ModeSelect.value;
+      syncModeUI(targetMode);
+      if (tab1Reports[targetMode]) {
+        renderReportMarkdown(tab1Reports[targetMode]);
+      } else if (tab1EvidenceData) {
+        await fetchAndRenderReport(tab1CurrentCode, targetMode, tab1EvidenceData);
+      }
+    });
+  }
 
   // 전문가용 / 초보자용 토글 버튼 이벤트
   modeBtns.forEach((btn) => {
@@ -52,8 +72,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const targetMode = btn.getAttribute("data-mode");
       if (targetMode === tab1CurrentMode) return;
 
-      tab1CurrentMode = targetMode;
-      modeBtns.forEach((b) => b.classList.toggle("active", b.getAttribute("data-mode") === targetMode));
+      syncModeUI(targetMode);
 
       if (tab1Reports[targetMode]) {
         renderReportMarkdown(tab1Reports[targetMode]);
@@ -89,6 +108,7 @@ document.addEventListener("DOMContentLoaded", () => {
     tab1EvidenceData = null;
     tab1CurrentCode = code;
     tab1Reports = { expert: null, beginner: null };
+    if (tab1ModeSelect) syncModeUI(tab1ModeSelect.value);
 
     tab1Error.classList.add("hidden");
     tab1Error.textContent = "";

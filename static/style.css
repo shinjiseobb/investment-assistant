@@ -725,3 +725,19 @@ body {
 .report-box strong {
   color: #1e40af;
 }
+
+.mode-select {
+  padding: 10px 12px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #1f2937;
+  background-color: #f9fafb;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  outline: none;
+  cursor: pointer;
+}
+
+.mode-select:focus {
+  border-color: #2563eb;
+}
