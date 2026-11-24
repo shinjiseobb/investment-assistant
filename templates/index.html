@@ -3,107 +3,193 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Stock Data Collector &amp; Briefing Tool</title>
+  <title>나의 투자도우미 (My Investment Assistant)</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
 </head>
 <body>
   <div class="container">
-    <!-- 상단 헤더 & 검색 구역 -->
+    <!-- 상단 헤더 -->
     <header class="header">
-      <h1>📈 종목 데이터 수집 &amp; 브리핑 도구</h1>
-      <p class="subtitle">6자리 종목코드를 입력하면 네이버 금융 시세·재무 실적과 최신 뉴스를 한눈에 수집합니다.</p>
+      <div class="header-top">
+        <h1>📊 나의 투자도우미 (My Investment Assistant)</h1>
+        <a href="/test" class="test-link">1차 수집기 테스트(/test) ↗</a>
+      </div>
+      <p class="subtitle">데이터 수집(네이버·Serper·FDR) + 수학 계산(몬테카를로·기술지표) + AI 해석(Dify 챗봇 2슬롯)</p>
     </header>
 
-    <section class="search-section">
-      <form id="search-form" class="search-form">
-        <input
-          type="text"
-          id="stock-code"
-          name="code"
-          placeholder="6자리 종목코드 입력 (예: 000660)"
-          maxlength="6"
-          autocomplete="off"
-          required
-        />
-        <button type="submit" id="fetch-btn">데이터 수집</button>
-      </form>
-      <div class="quick-examples">
-        <span>빠른 입력:</span>
-        <button type="button" class="example-btn" data-code="000660">SK하이닉스 (000660)</button>
-        <button type="button" class="example-btn" data-code="005930">삼성전자 (005930)</button>
-        <button type="button" class="example-btn" data-code="035420">NAVER (035420)</button>
+    <!-- 3탭 네비게이션 -->
+    <nav class="tab-nav">
+      <button type="button" class="tab-btn active" data-tab="1">1. 종목 심층분석 채팅</button>
+      <button type="button" class="tab-btn" data-tab="2">2. 리밸런싱 도우미 (AI 없음)</button>
+      <button type="button" class="tab-btn" data-tab="3">3. 기술지표 차트 + 채팅</button>
+    </nav>
+
+    <!-- ==================== 탭 1: 종목 심층분석 채팅 ==================== -->
+    <section id="tab-1" class="tab-panel active">
+      <div class="card-section">
+        <h3>💬 1단계: 종목 조회 및 AI 전문가 심층분석</h3>
+        <form id="tab1-load-form" class="inline-form">
+          <input type="text" id="tab1-code" placeholder="종목코드 6자리 (예: 000660)" maxlength="6" value="000660" required />
+          <button type="submit" id="tab1-load-btn">종목 조회 &amp; AI 분석 시작</button>
+        </form>
+        <div class="quick-examples" style="margin-bottom: 14px;">
+          <span>빠른 선택:</span>
+          <button type="button" class="example-btn tab1-quick-btn" data-code="000660">SK하이닉스 (000660)</button>
+          <button type="button" class="example-btn tab1-quick-btn" data-code="005930">삼성전자 (005930)</button>
+          <button type="button" class="example-btn tab1-quick-btn" data-code="035420">NAVER (035420)</button>
+        </div>
+        <div id="tab1-error" class="error-box hidden"></div>
+        <div id="tab1-loading" class="loading-box hidden">네이버 금융·Serper 뉴스 데이터를 수집하고 AI 애널리스트 리포트를 생성 중입니다...</div>
+      </div>
+
+      <!-- 수집된 종목 데이터 근거 (/test 수준 이상의 가독성) -->
+      <div id="tab1-evidence-panel" class="hidden">
+        <div class="card-section">
+          <div class="stock-title-bar">
+            <h2 id="tab1-stock-name">-</h2>
+            <span id="tab1-stock-code-badge" class="code-badge">000000</span>
+          </div>
+
+          <h4 style="margin-bottom: 10px; color: #374151;">📌 핵심 투자 지표 (Snapshot)</h4>
+          <div class="snapshot-grid" style="margin-bottom: 20px;">
+            <div class="stat-card">
+              <span class="stat-label">현재가</span>
+              <strong id="tab1-val-price" class="stat-value">-</strong>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">등락률</span>
+              <strong id="tab1-val-change" class="stat-value">-</strong>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">시가총액</span>
+              <strong id="tab1-val-cap" class="stat-value">-</strong>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">PER</span>
+              <strong id="tab1-val-per" class="stat-value">-</strong>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">PBR</span>
+              <strong id="tab1-val-pbr" class="stat-value">-</strong>
+            </div>
+          </div>
+
+          <h4 style="margin-bottom: 10px; color: #374151;">📊 연간 기업실적분석 (Financials)</h4>
+          <div class="table-wrapper" style="margin-bottom: 20px;">
+            <table class="finance-table">
+              <thead>
+                <tr>
+                  <th>기간</th>
+                  <th>구분</th>
+                  <th>매출액</th>
+                  <th>영업이익</th>
+                  <th>ROE (%)</th>
+                </tr>
+              </thead>
+              <tbody id="tab1-finance-tbody"></tbody>
+            </table>
+          </div>
+
+          <h4 style="margin-bottom: 10px; color: #374151;">📰 최신 관련 뉴스 (Serper News API)</h4>
+          <ul id="tab1-news-list" class="news-list"></ul>
+        </div>
+      </div>
+
+      <!-- 2단계: 전문가 분석 리포트 & 후속 채팅 -->
+      <div id="tab1-chat-section" class="card-section hidden">
+        <h3>🤖 2단계: AI 전문가 심층분석 리포트 &amp; 후속 채팅</h3>
+        <div class="chat-box">
+          <div id="tab1-chat-log" class="chat-log chat-log-tall"></div>
+          <form id="tab1-chat-form" class="inline-form" style="margin-top: 12px; margin-bottom: 0;">
+            <input type="text" id="tab1-question" placeholder="수집된 근거를 바탕으로 추가 질문을 입력하세요 (예: 최근 뉴스가 주가에 호재인가요?)" required />
+            <button type="submit" id="tab1-chat-btn">추가 질문</button>
+          </form>
+        </div>
       </div>
     </section>
 
-    <!-- 로딩 및 오류 안내 구역 -->
-    <div id="loading-box" class="loading-box hidden">
-      데이터를 수집하는 중입니다... 잠시만 기다려 주세요.
-    </div>
-    <div id="error-box" class="error-box hidden"></div>
+    <!-- ==================== 탭 2: 리밸런싱 도우미 ==================== -->
+    <section id="tab-2" class="tab-panel hidden">
+      <div class="card-section">
+        <h3>⚖️ 포트폴리오 리밸런싱 도우미 (최근 1년 몬테카를로 + 효율적 프론티어)</h3>
+        <form id="tab2-form" class="inline-form">
+          <input type="text" id="tab2-codes" placeholder="종목/ETF 코드 2개 이상 쉼표 구분 (예: 005930, 000660, 069500)" value="005930, 000660, 069500" required />
+          <button type="submit" id="tab2-submit">최적 비중 계산 (다시 계산)</button>
+        </form>
+        <div id="tab2-error" class="error-box hidden"></div>
+        <div id="tab2-loading" class="loading-box hidden">최근 1년 주가 수집 및 몬테카를로 3,000회 시뮬레이션 계산 중...</div>
 
-    <!-- 수집 결과 메인 구역 -->
-    <main id="result-container" class="result-container hidden">
-      <div class="stock-title-bar">
-        <h2 id="stock-name">-</h2>
-        <span id="stock-code-badge" class="code-badge">000000</span>
+        <div id="tab2-result" class="hidden">
+          <div class="snapshot-grid" style="margin-bottom: 18px;">
+            <div class="stat-card">
+              <span class="stat-label">기대 수익률 (연율화)</span>
+              <strong id="reb-return" class="stat-value">-</strong>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">변동성 리스크</span>
+              <strong id="reb-vol" class="stat-value">-</strong>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">최대 샤프 비율</span>
+              <strong id="reb-sharpe" class="stat-value">-</strong>
+            </div>
+          </div>
+
+          <div class="charts-grid">
+            <div class="chart-card">
+              <h4>적정 투자 비중 (%)</h4>
+              <canvas id="rebalance-pie-chart"></canvas>
+            </div>
+            <div class="chart-card">
+              <h4>효율적 프론티어 (리스크 vs 수익률)</h4>
+              <canvas id="rebalance-frontier-chart"></canvas>
+            </div>
+          </div>
+        </div>
       </div>
+    </section>
 
-      <!-- 구역 1: 스냅샷 카드 -->
-      <section class="card-section">
-        <h3>1. 핵심 투자 지표 (Snapshot)</h3>
-        <div class="snapshot-grid">
-          <div class="stat-card">
-            <span class="stat-label">현재가</span>
-            <strong id="val-price" class="stat-value">-</strong>
+    <!-- ==================== 탭 3: 기술지표 차트 + 채팅 ==================== -->
+    <section id="tab-3" class="tab-panel hidden">
+      <div class="card-section">
+        <h3>📈 기술지표 차트 &amp; AI 지표해석기</h3>
+        <form id="tab3-load-form" class="inline-form">
+          <input type="text" id="tab3-code" placeholder="종목코드 6자리 (예: 000660)" maxlength="6" value="000660" required />
+          <button type="submit" id="tab3-load-btn">차트 &amp; 지표 계산</button>
+        </form>
+        <div id="tab3-error" class="error-box hidden"></div>
+        <div id="tab3-loading" class="loading-box hidden">FinanceDataReader로 기술지표를 계산하고 있습니다...</div>
+
+        <div id="tab3-content" class="hidden">
+          <div id="tab3-latest-badges" class="latest-badges"></div>
+
+          <div class="charts-grid" style="margin-bottom: 18px;">
+            <div class="chart-card">
+              <h4>주가 · 이동평균선(MA5/20/60) · 볼린저밴드</h4>
+              <canvas id="tech-price-chart"></canvas>
+            </div>
+            <div class="chart-card">
+              <h4>RSI(14) 추이</h4>
+              <canvas id="tech-rsi-chart"></canvas>
+            </div>
           </div>
-          <div class="stat-card">
-            <span class="stat-label">등락률</span>
-            <strong id="val-change" class="stat-value">-</strong>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">시가총액</span>
-            <strong id="val-cap" class="stat-value">-</strong>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">PER</span>
-            <strong id="val-per" class="stat-value">-</strong>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">PBR</span>
-            <strong id="val-pbr" class="stat-value">-</strong>
+
+          <div class="chat-box">
+            <h4>🤖 지표해석기 챗봇 (계산된 최신 지표 숫자 자동 주입)</h4>
+            <div id="tab3-chat-log" class="chat-log">
+              <div class="chat-msg bot">위 차트의 최신 지표 숫자가 준비되었습니다! RSI, 이동평균선, 볼린저밴드 등 궁금한 점을 물어보세요.</div>
+            </div>
+            <form id="tab3-chat-form" class="inline-form" style="margin-top: 10px;">
+              <input type="text" id="tab3-question" placeholder="예: 현재 RSI와 볼린저밴드 위치가 무슨 뜻인지 쉽게 설명해줘" required />
+              <button type="submit" id="tab3-chat-btn">해석 요청</button>
+            </form>
           </div>
         </div>
-      </section>
-
-      <!-- 구역 2: 기업실적분석 표 -->
-      <section class="card-section">
-        <h3>2. 연간 기업실적분석 (Financials)</h3>
-        <div class="table-wrapper">
-          <table class="finance-table">
-            <thead>
-              <tr>
-                <th>기간</th>
-                <th>구분</th>
-                <th>매출액</th>
-                <th>영업이익</th>
-                <th>ROE (%)</th>
-              </tr>
-            </thead>
-            <tbody id="finance-tbody">
-              <!-- JS로 동적 렌더링 -->
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <!-- 구역 3: 최신 관련 뉴스 리스트 -->
-      <section class="card-section">
-        <h3>3. 최신 관련 뉴스 (Serper News API)</h3>
-        <ul id="news-list" class="news-list">
-          <!-- JS로 동적 렌더링 -->
-        </ul>
-      </section>
-    </main>
+      </div>
+    </section>
   </div>
 
   <script src="{{ url_for('static', filename='app.js') }}"></script>

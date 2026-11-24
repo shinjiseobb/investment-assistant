@@ -1,107 +1,183 @@
 document.addEventListener("DOMContentLoaded", () => {
-  console.log("[PAGE] 페이지 로드 완료");
+  console.log("[PAGE] 메인 3탭 페이지 로드 완료");
 
-  const searchForm = document.getElementById("search-form");
-  const stockCodeInput = document.getElementById("stock-code");
-  const fetchBtn = document.getElementById("fetch-btn");
-  const loadingBox = document.getElementById("loading-box");
-  const errorBox = document.getElementById("error-box");
-  const resultContainer = document.getElementById("result-container");
+  // ==================== 1. 탭 전환 로직 ====================
+  const tabBtns = document.querySelectorAll(".tab-btn");
+  const tabPanels = document.querySelectorAll(".tab-panel");
 
-  // 빠른 입력 예시 버튼 연결
-  document.querySelectorAll(".example-btn").forEach((btn) => {
+  tabBtns.forEach((btn) => {
     btn.addEventListener("click", () => {
-      const code = btn.getAttribute("data-code");
-      stockCodeInput.value = code;
-      fetchStockData(code);
+      const targetTab = btn.getAttribute("data-tab");
+      console.log(`[TAB] 탭 전환 (tab=${targetTab})`);
+
+      tabBtns.forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+
+      tabPanels.forEach((panel) => {
+        if (panel.id === `tab-${targetTab}`) {
+          panel.classList.remove("hidden");
+          panel.classList.add("active");
+        } else {
+          panel.classList.add("hidden");
+          panel.classList.remove("active");
+        }
+      });
     });
   });
 
-  // 검색 폼 제출 이벤트
-  searchForm.addEventListener("submit", (e) => {
-    e.preventDefault();
-    const code = stockCodeInput.value.trim();
-    fetchStockData(code);
+  // ==================== 2. 탭 1: 종목 조회 → 자동 분석 → 후속 채팅 ====================
+  const tab1LoadForm = document.getElementById("tab1-load-form");
+  const tab1CodeInput = document.getElementById("tab1-code");
+  const tab1LoadBtn = document.getElementById("tab1-load-btn");
+  const tab1Error = document.getElementById("tab1-error");
+  const tab1Loading = document.getElementById("tab1-loading");
+  const tab1EvidencePanel = document.getElementById("tab1-evidence-panel");
+  const tab1ChatSection = document.getElementById("tab1-chat-section");
+  const tab1ChatLog = document.getElementById("tab1-chat-log");
+  const tab1ChatForm = document.getElementById("tab1-chat-form");
+  const tab1QuestionInput = document.getElementById("tab1-question");
+  const tab1ChatBtn = document.getElementById("tab1-chat-btn");
+
+  let tab1CurrentCode = "";
+  let tab1ConversationId = "";
+  let tab1EvidenceData = null;
+
+  // 빠른 선택 예시 버튼
+  document.querySelectorAll(".tab1-quick-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const code = btn.getAttribute("data-code");
+      tab1CodeInput.value = code;
+      runInitialAnalysis(code);
+    });
   });
 
-  async function fetchStockData(code) {
-    console.log(`[SEARCH] 종목 수집 요청 시작 (종목코드: ${code})`);
+  // 1단계: 종목 조회 & 자동 전문가 분석 시작
+  tab1LoadForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const code = tab1CodeInput.value.trim();
+    if (code) runInitialAnalysis(code);
+  });
 
-    // UI 초기화
-    loadingBox.classList.remove("hidden");
-    errorBox.classList.add("hidden");
-    errorBox.innerHTML = "";
-    fetchBtn.disabled = true;
+  async function runInitialAnalysis(code) {
+    console.log(`[ANALYZE] 탭1 심층분석 요청 시작 (code=${code})`);
+
+    tab1ConversationId = "";
+    tab1EvidenceData = null;
+    tab1CurrentCode = code;
+
+    tab1Error.classList.add("hidden");
+    tab1Error.textContent = "";
+    tab1EvidencePanel.classList.add("hidden");
+    tab1ChatSection.classList.add("hidden");
+    tab1ChatLog.innerHTML = "";
+    tab1Loading.classList.remove("hidden");
+    tab1LoadBtn.disabled = true;
 
     try {
-      const response = await fetch("/fetch", {
+      const resp = await fetch("/api/chat/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code }),
+        body: JSON.stringify({
+          code,
+          is_initial: true,
+        }),
       });
 
-      const data = await response.json();
+      const data = await resp.json();
 
-      // 부분/전체 에러 표시
-      if (data.errors && data.errors.length > 0) {
-        console.error("[ERROR] 수집 중 오류 발생:", data.errors);
-        renderErrors(data.errors);
+      if (data.evidence && data.evidence.name) {
+        tab1EvidenceData = data.evidence;
+        renderTab1Evidence(data.evidence);
+        tab1EvidencePanel.classList.remove("hidden");
+        tab1ChatSection.classList.remove("hidden");
       }
 
-      // 종목명을 가져오지 못한 완전 실패 시 결과 영역 숨김
-      if (!data.name) {
-        resultContainer.classList.add("hidden");
-        return;
+      if (data.error) {
+        console.error("[ERROR] 탭1 오류 발생:", data.error);
+        tab1Error.textContent = `⚠️ ${data.error}`;
+        tab1Error.classList.remove("hidden");
+        if (!data.answer) {
+          if (data.evidence && data.evidence.name) {
+            appendChatMessage(tab1ChatLog, `안내: ${data.error}`, "bot");
+          }
+          return;
+        }
       }
 
-      console.log(
-        `[PARSED] 기본 정보 수집 완료 (종목명: ${data.name}, 현재가: ${data.snapshot?.current_price})`
-      );
-      console.log(`[NEWS] 뉴스 수집 완료 (수집된 기사 수: ${data.news?.length || 0})`);
+      if (data.conversation_id) {
+        tab1ConversationId = data.conversation_id;
+      }
 
-      renderResult(data);
-      console.log("[RENDER] 화면 데이터 카드 렌더링 완료");
+      appendChatMessage(tab1ChatLog, data.answer || "응답을 받지 못했습니다.", "bot");
     } catch (err) {
-      console.error("[ERROR] 수집 중 오류 발생:", err.message);
-      renderErrors(["서버와 통신하는 중 오류가 발생했습니다. 서버가 실행 중인지 확인해 주세요."]);
-      resultContainer.classList.add("hidden");
+      console.error("[ERROR] 탭1 통신 오류:", err.message);
+      tab1Error.textContent = "⚠️ 서버와 통신하는 중 오류가 발생했습니다.";
+      tab1Error.classList.remove("hidden");
     } finally {
-      loadingBox.classList.add("hidden");
-      fetchBtn.disabled = false;
+      tab1Loading.classList.add("hidden");
+      tab1LoadBtn.disabled = false;
     }
   }
 
-  function renderErrors(errors) {
-    errorBox.innerHTML = "";
-    const title = document.createElement("strong");
-    title.textContent = "⚠️ 확인이 필요한 안내:";
-    errorBox.appendChild(title);
+  // 2단계: 수집된 근거를 유지한 채 후속 채팅 이어가기
+  tab1ChatForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const question = tab1QuestionInput.value.trim();
+    if (!question || !tab1CurrentCode) return;
 
-    const ul = document.createElement("ul");
-    errors.forEach((msg) => {
-      const li = document.createElement("li");
-      li.textContent = msg;
-      ul.appendChild(li);
-    });
-    errorBox.appendChild(ul);
-    errorBox.classList.remove("hidden");
-  }
+    appendChatMessage(tab1ChatLog, question, "user");
+    tab1QuestionInput.value = "";
+    tab1ChatBtn.disabled = true;
 
-  function renderResult(data) {
-    // 1. 종목 헤더
-    document.getElementById("stock-name").textContent = data.name || "-";
-    document.getElementById("stock-code-badge").textContent = data.code || "-";
+    const loadingBubble = appendChatMessage(tab1ChatLog, "수집된 근거와 대화 맥락을 바탕으로 답변 생성 중...", "bot");
 
-    // 2. 스냅샷 카드
-    const snap = data.snapshot || {};
-    document.getElementById("val-price").textContent =
-      snap.current_price !== null && snap.current_price !== undefined
-        ? `${snap.current_price.toLocaleString("ko-KR")}원`
-        : "-";
+    try {
+      const resp = await fetch("/api/chat/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: tab1CurrentCode,
+          question,
+          is_initial: false,
+          conversation_id: tab1ConversationId,
+          evidence: tab1EvidenceData,
+        }),
+      });
 
-    const changeEl = document.getElementById("val-change");
+      const data = await resp.json();
+      loadingBubble.remove();
+
+      if (data.error) {
+        console.error("[ERROR] 탭1 후속 채팅 오류:", data.error);
+        appendChatMessage(tab1ChatLog, `안내: ${data.error}`, "bot");
+        return;
+      }
+
+      if (data.conversation_id) {
+        tab1ConversationId = data.conversation_id;
+      }
+
+      appendChatMessage(tab1ChatLog, data.answer || "응답을 받지 못했습니다.", "bot");
+    } catch (err) {
+      loadingBubble.remove();
+      console.error("[ERROR] 탭1 후속 통신 오류:", err.message);
+      appendChatMessage(tab1ChatLog, "⚠️ 서버와 통신하는 중 오류가 발생했습니다.", "bot");
+    } finally {
+      tab1ChatBtn.disabled = false;
+    }
+  });
+
+  function renderTab1Evidence(ev) {
+    document.getElementById("tab1-stock-name").textContent = ev.name || "-";
+    document.getElementById("tab1-stock-code-badge").textContent = ev.code || "-";
+
+    const snap = ev.snapshot || {};
+    document.getElementById("tab1-val-price").textContent =
+      snap.current_price != null ? `${snap.current_price.toLocaleString("ko-KR")}원` : "-";
+
+    const changeEl = document.getElementById("tab1-val-change");
     changeEl.classList.remove("up", "down");
-    if (snap.change_rate !== null && snap.change_rate !== undefined) {
+    if (snap.change_rate != null) {
       const sign = snap.change_rate > 0 ? "+" : "";
       changeEl.textContent = `${sign}${snap.change_rate}%`;
       if (snap.change_rate > 0) changeEl.classList.add("up");
@@ -110,16 +186,14 @@ document.addEventListener("DOMContentLoaded", () => {
       changeEl.textContent = "-";
     }
 
-    document.getElementById("val-cap").textContent = formatKoreanCurrency(snap.market_cap);
-    document.getElementById("val-per").textContent =
-      snap.per !== null && snap.per !== undefined ? `${snap.per}배` : "-";
-    document.getElementById("val-pbr").textContent =
-      snap.pbr !== null && snap.pbr !== undefined ? `${snap.pbr}배` : "-";
+    document.getElementById("tab1-val-cap").textContent = formatKoreanCurrency(snap.market_cap);
+    document.getElementById("tab1-val-per").textContent = snap.per != null ? `${snap.per}배` : "-";
+    document.getElementById("tab1-val-pbr").textContent = snap.pbr != null ? `${snap.pbr}배` : "-";
 
-    // 3. 연간 기업실적분석 테이블
-    const tbody = document.getElementById("finance-tbody");
+    // 연간 실적 테이블
+    const tbody = document.getElementById("tab1-finance-tbody");
     tbody.innerHTML = "";
-    const financials = data.financials || [];
+    const financials = ev.financials || [];
     if (financials.length === 0) {
       const tr = document.createElement("tr");
       const td = document.createElement("td");
@@ -153,18 +227,17 @@ document.addEventListener("DOMContentLoaded", () => {
         tdOp.textContent = formatKoreanCurrency(row.operating_income);
 
         const tdRoe = document.createElement("td");
-        tdRoe.textContent =
-          row.roe !== null && row.roe !== undefined ? `${row.roe}%` : "-";
+        tdRoe.textContent = row.roe != null ? `${row.roe}%` : "-";
 
         tr.append(tdPeriod, tdType, tdRev, tdOp, tdRoe);
         tbody.appendChild(tr);
       });
     }
 
-    // 4. 뉴스 리스트
-    const newsListEl = document.getElementById("news-list");
+    // 뉴스 카드 리스트
+    const newsListEl = document.getElementById("tab1-news-list");
     newsListEl.innerHTML = "";
-    const news = data.news || [];
+    const news = ev.news || [];
     if (news.length === 0) {
       const li = document.createElement("li");
       li.className = "news-item";
@@ -194,11 +267,305 @@ document.addEventListener("DOMContentLoaded", () => {
         newsListEl.appendChild(li);
       });
     }
-
-    resultContainer.classList.remove("hidden");
   }
 
-  // 원(KRW) 단위 큰 숫자를 읽기 쉬운 '조/억' 단위로 포맷팅
+  // ==================== 3. 탭 2: 리밸런싱 도우미 (Dify 없음) ====================
+  const tab2Form = document.getElementById("tab2-form");
+  const tab2CodesInput = document.getElementById("tab2-codes");
+  const tab2SubmitBtn = document.getElementById("tab2-submit");
+  const tab2Error = document.getElementById("tab2-error");
+  const tab2Loading = document.getElementById("tab2-loading");
+  const tab2Result = document.getElementById("tab2-result");
+
+  let rebalancePieChart = null;
+  let rebalanceFrontierChart = null;
+
+  tab2Form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const codes = tab2CodesInput.value.trim();
+    if (!codes) return;
+
+    console.log(`[REBALANCE] 탭2 리밸런싱 계산 요청 (codes=${codes})`);
+    tab2Error.classList.add("hidden");
+    tab2Result.classList.add("hidden");
+    tab2Loading.classList.remove("hidden");
+    tab2SubmitBtn.disabled = true;
+
+    try {
+      const resp = await fetch("/api/rebalance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ codes }),
+      });
+
+      const data = await resp.json();
+      if (!resp.ok || data.error) {
+        console.error("[ERROR] 탭2 계산 오류:", data.error);
+        tab2Error.textContent = `⚠️ ${data.error || "리밸런싱 계산에 실패했습니다."}`;
+        tab2Error.classList.remove("hidden");
+        return;
+      }
+
+      renderRebalanceResult(data);
+    } catch (err) {
+      console.error("[ERROR] 탭2 통신 오류:", err.message);
+      tab2Error.textContent = "⚠️ 서버와 통신하는 중 오류가 발생했습니다.";
+      tab2Error.classList.remove("hidden");
+    } finally {
+      tab2Loading.classList.add("hidden");
+      tab2SubmitBtn.disabled = false;
+    }
+  });
+
+  function renderRebalanceResult(data) {
+    const m = data.metrics || {};
+    document.getElementById("reb-return").textContent = m.expected_return != null ? `${m.expected_return}%` : "-";
+    document.getElementById("reb-vol").textContent = m.volatility != null ? `${m.volatility}%` : "-";
+    document.getElementById("reb-sharpe").textContent = m.sharpe_ratio != null ? `${m.sharpe_ratio}` : "-";
+
+    const weights = data.optimal_weights || {};
+    const labels = Object.keys(weights);
+    const values = Object.values(weights);
+    const palette = ["#2563eb", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"];
+
+    if (rebalancePieChart) rebalancePieChart.destroy();
+    const pieCtx = document.getElementById("rebalance-pie-chart").getContext("2d");
+    rebalancePieChart = new Chart(pieCtx, {
+      type: "doughnut",
+      data: {
+        labels: labels.map((code, i) => `${code} (${values[i]}%)`),
+        datasets: [
+          {
+            data: values,
+            backgroundColor: labels.map((_, i) => palette[i % palette.length]),
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { position: "bottom" } },
+      },
+    });
+
+    if (rebalanceFrontierChart) rebalanceFrontierChart.destroy();
+    const frontierCtx = document.getElementById("rebalance-frontier-chart").getContext("2d");
+    const simPoints = (data.frontier_points || []).map((p) => ({ x: p.risk, y: p.return }));
+
+    rebalanceFrontierChart = new Chart(frontierCtx, {
+      type: "scatter",
+      data: {
+        datasets: [
+          {
+            label: "시뮬레이션 조합",
+            data: simPoints,
+            backgroundColor: "rgba(59, 130, 246, 0.35)",
+            pointRadius: 3,
+          },
+          {
+            label: "최대 샤프 최적점",
+            data: [{ x: m.volatility, y: m.expected_return }],
+            backgroundColor: "#dc2626",
+            pointRadius: 8,
+            pointStyle: "star",
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        scales: {
+          x: { title: { display: true, text: "연율화 변동성 리스크 (%)" } },
+          y: { title: { display: true, text: "연율화 기대수익률 (%)" } },
+        },
+      },
+    });
+
+    tab2Result.classList.remove("hidden");
+  }
+
+  // ==================== 4. 탭 3: 기술지표 차트 + 지표해석기 채팅 ====================
+  const tab3LoadForm = document.getElementById("tab3-load-form");
+  const tab3CodeInput = document.getElementById("tab3-code");
+  const tab3LoadBtn = document.getElementById("tab3-load-btn");
+  const tab3Error = document.getElementById("tab3-error");
+  const tab3Loading = document.getElementById("tab3-loading");
+  const tab3Content = document.getElementById("tab3-content");
+  const tab3Badges = document.getElementById("tab3-latest-badges");
+
+  const tab3ChatForm = document.getElementById("tab3-chat-form");
+  const tab3QuestionInput = document.getElementById("tab3-question");
+  const tab3ChatBtn = document.getElementById("tab3-chat-btn");
+  const tab3ChatLog = document.getElementById("tab3-chat-log");
+
+  let techPriceChart = null;
+  let techRsiChart = null;
+  let tab3CurrentCode = "";
+  let tab3LatestIndicators = null;
+  let tab3ConversationId = "";
+
+  tab3LoadForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const code = tab3CodeInput.value.trim();
+    if (!code) return;
+
+    tab3Error.classList.add("hidden");
+    tab3Content.classList.add("hidden");
+    tab3Loading.classList.remove("hidden");
+    tab3LoadBtn.disabled = true;
+
+    try {
+      const resp = await fetch("/api/indicators", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+
+      const data = await resp.json();
+      if (!resp.ok || data.error) {
+        console.error("[ERROR] 탭3 지표 계산 오류:", data.error);
+        tab3Error.textContent = `⚠️ ${data.error || "기술지표를 불러오지 못했습니다."}`;
+        tab3Error.classList.remove("hidden");
+        return;
+      }
+
+      if (code !== tab3CurrentCode) {
+        tab3ConversationId = "";
+        tab3CurrentCode = code;
+      }
+      tab3LatestIndicators = data.latest;
+
+      console.log(`[INDICATOR] 탭3 기술지표 계산 완료 (code=${code})`);
+      renderTechBadges(data.latest);
+      renderTechCharts(data);
+      tab3Content.classList.remove("hidden");
+    } catch (err) {
+      console.error("[ERROR] 탭3 통신 오류:", err.message);
+      tab3Error.textContent = "⚠️ 서버와 통신하는 중 오류가 발생했습니다.";
+      tab3Error.classList.remove("hidden");
+    } finally {
+      tab3Loading.classList.add("hidden");
+      tab3LoadBtn.disabled = false;
+    }
+  });
+
+  function renderTechBadges(latest) {
+    if (!latest) return;
+    const items = [
+      `기준일: ${latest.date}`,
+      `종가: ${latest.close != null ? latest.close.toLocaleString("ko-KR") + "원" : "-"}`,
+      `MA5: ${latest.ma5 != null ? latest.ma5.toLocaleString("ko-KR") : "-"}`,
+      `MA20: ${latest.ma20 != null ? latest.ma20.toLocaleString("ko-KR") : "-"}`,
+      `MA60: ${latest.ma60 != null ? latest.ma60.toLocaleString("ko-KR") : "-"}`,
+      `RSI(14): ${latest.rsi14 != null ? latest.rsi14 : "-"}`,
+      `MACD: ${latest.macd != null ? latest.macd : "-"}`,
+      `볼린저 상/하: ${latest.bb_upper != null ? latest.bb_upper.toLocaleString("ko-KR") : "-"} / ${latest.bb_lower != null ? latest.bb_lower.toLocaleString("ko-KR") : "-"}`,
+    ];
+    tab3Badges.innerHTML = items.map((t) => `<span class="ind-badge">${escapeHtml(t)}</span>`).join("");
+  }
+
+  function renderTechCharts(data) {
+    if (techPriceChart) techPriceChart.destroy();
+    const priceCtx = document.getElementById("tech-price-chart").getContext("2d");
+    techPriceChart = new Chart(priceCtx, {
+      type: "line",
+      data: {
+        labels: data.dates,
+        datasets: [
+          { label: "종가", data: data.close, borderColor: "#111827", borderWidth: 2, pointRadius: 0 },
+          { label: "MA5", data: data.ma5, borderColor: "#ef4444", borderWidth: 1.5, pointRadius: 0 },
+          { label: "MA20", data: data.ma20, borderColor: "#f59e0b", borderWidth: 1.5, pointRadius: 0 },
+          { label: "MA60", data: data.ma60, borderColor: "#10b981", borderWidth: 1.5, pointRadius: 0 },
+          { label: "볼린저 상단", data: data.bb_upper, borderColor: "#9ca3af", borderDash: [4, 4], borderWidth: 1, pointRadius: 0 },
+          { label: "볼린저 하단", data: data.bb_lower, borderColor: "#9ca3af", borderDash: [4, 4], borderWidth: 1, pointRadius: 0 },
+        ],
+      },
+      options: {
+        responsive: true,
+        interaction: { mode: "index", intersect: false },
+        plugins: { legend: { position: "bottom" } },
+      },
+    });
+
+    if (techRsiChart) techRsiChart.destroy();
+    const rsiCtx = document.getElementById("tech-rsi-chart").getContext("2d");
+    techRsiChart = new Chart(rsiCtx, {
+      type: "line",
+      data: {
+        labels: data.dates,
+        datasets: [
+          { label: "RSI(14)", data: data.rsi14, borderColor: "#2563eb", borderWidth: 2, pointRadius: 0 },
+          { label: "과매수(70)", data: data.dates.map(() => 70), borderColor: "#dc2626", borderDash: [4, 4], borderWidth: 1, pointRadius: 0 },
+          { label: "과매도(30)", data: data.dates.map(() => 30), borderColor: "#16a34a", borderDash: [4, 4], borderWidth: 1, pointRadius: 0 },
+        ],
+      },
+      options: {
+        responsive: true,
+        scales: { y: { min: 0, max: 100 } },
+        plugins: { legend: { position: "bottom" } },
+      },
+    });
+  }
+
+  tab3ChatForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const question = tab3QuestionInput.value.trim();
+    if (!question || !tab3CurrentCode || !tab3LatestIndicators) return;
+
+    console.log("[TECH_CHAT] 탭3 기술지표 숫자 주입 채팅 요청");
+    appendChatMessage(tab3ChatLog, question, "user");
+    tab3QuestionInput.value = "";
+    tab3ChatBtn.disabled = true;
+
+    const loadingBubble = appendChatMessage(tab3ChatLog, "계산된 지표를 바탕으로 지표해석기 챗봇이 분석 중...", "bot");
+
+    try {
+      const resp = await fetch("/api/chat/tech", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: tab3CurrentCode,
+          question,
+          latest: tab3LatestIndicators, // 눈에 안 보이게 최신 지표 숫자 주입
+          conversation_id: tab3ConversationId,
+        }),
+      });
+
+      const data = await resp.json();
+      loadingBubble.remove();
+
+      if (data.error) {
+        console.error("[ERROR] 탭3 채팅 오류:", data.error);
+        appendChatMessage(tab3ChatLog, `안내: ${data.error}`, "bot");
+        return;
+      }
+
+      if (data.conversation_id) {
+        tab3ConversationId = data.conversation_id;
+      }
+      appendChatMessage(tab3ChatLog, data.answer || "응답을 받지 못했습니다.", "bot");
+    } catch (err) {
+      loadingBubble.remove();
+      console.error("[ERROR] 탭3 채팅 통신 오류:", err.message);
+      appendChatMessage(tab3ChatLog, "⚠️ 서버와 통신하는 중 오류가 발생했습니다.", "bot");
+    } finally {
+      tab3ChatBtn.disabled = false;
+    }
+  });
+
+  // ==================== 공통 유틸리티 ====================
+  function appendChatMessage(container, text, role) {
+    const div = document.createElement("div");
+    div.className = `chat-msg ${role}`;
+    if (role === "bot" && window.marked && window.DOMPurify) {
+      div.classList.add("markdown-body");
+      div.innerHTML = DOMPurify.sanitize(marked.parse(String(text || "")));
+    } else {
+      div.textContent = text;
+    }
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+    return div;
+  }
+
   function formatKoreanCurrency(amount) {
     if (amount === null || amount === undefined) return "-";
     const isNegative = amount < 0;
@@ -217,5 +584,13 @@ document.addEventListener("DOMContentLoaded", () => {
       formatted = `${eok.toLocaleString("ko-KR")}억`;
     }
     return isNegative ? `-${formatted}` : formatted;
+  }
+
+  function escapeHtml(str) {
+    return String(str || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
   }
 });
