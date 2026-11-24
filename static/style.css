@@ -741,3 +741,61 @@ body {
 .mode-select:focus {
   border-color: #2563eb;
 }
+
+/* ==================== 실시간 종목 자동완성 드롭다운 ==================== */
+.autocomplete-wrapper {
+  position: relative;
+  flex: 1;
+  min-width: 220px;
+}
+
+.autocomplete-wrapper input[type="text"] {
+  width: 100%;
+}
+
+.autocomplete-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  background-color: #ffffff;
+  border: 1px solid #d1d5db;
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
+  list-style: none;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.autocomplete-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid #f3f4f6;
+  font-size: 0.92rem;
+}
+
+.autocomplete-item:last-child {
+  border-bottom: none;
+}
+
+.autocomplete-item:hover {
+  background-color: #eff6ff;
+}
+
+.ac-name {
+  font-weight: 600;
+  color: #111827;
+}
+
+.ac-meta {
+  font-size: 0.8rem;
+  color: #6b7280;
+  background-color: #f3f4f6;
+  padding: 2px 7px;
+  border-radius: 6px;
+}

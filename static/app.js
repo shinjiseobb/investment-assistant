@@ -251,8 +251,8 @@ document.addEventListener("DOMContentLoaded", () => {
     marketBar.innerHTML = mcItems.join("");
 
     const snap = ev.snapshot || {};
-    document.getElementById("tab1-val-price").textContent =
-      snap.current_price != null ? `${snap.current_price.toLocaleString("ko-KR")}원` : "-";
+    const currency = ev.currency || "KRW";
+    document.getElementById("tab1-val-price").textContent = formatPrice(snap.current_price, currency);
 
     const changeEl = document.getElementById("tab1-val-change");
     changeEl.classList.remove("up", "down");
@@ -265,7 +265,8 @@ document.addEventListener("DOMContentLoaded", () => {
       changeEl.textContent = "-";
     }
 
-    document.getElementById("tab1-val-cap").textContent = formatKoreanCurrency(snap.market_cap);
+    document.getElementById("tab1-val-cap").textContent =
+      snap.market_cap_text ? snap.market_cap_text : formatKoreanCurrency(snap.market_cap);
 
     const labelPer = document.getElementById("tab1-label-per");
     const labelPbr = document.getElementById("tab1-label-pbr");
@@ -273,11 +274,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const valPbr = document.getElementById("tab1-val-pbr");
     const financialsBox = document.getElementById("tab1-financials-box");
     const etfBox = document.getElementById("tab1-etf-box");
+    const overviewBox = document.getElementById("tab1-overview-box");
 
     if (ev.asset_type === "etf" && ev.etf_info) {
       const etf = ev.etf_info;
       labelPer.textContent = "NAV (괴리율)";
-      valPer.textContent = etf.nav != null ? `${etf.nav.toLocaleString("ko-KR")}원 (${etf.deviation_rate ?? "-"}%)` : "-";
+      valPer.textContent = etf.nav != null
+        ? (etf.deviation_rate != null ? `${formatPrice(etf.nav, currency)} (${etf.deviation_rate}%)` : formatPrice(etf.nav, currency))
+        : "-";
       labelPbr.textContent = "펀드보수 / 분배금";
       valPbr.textContent = `${etf.total_fee ?? "-"}% / ${etf.dividend_yield ?? "-"}%`;
 
@@ -303,7 +307,18 @@ document.addEventListener("DOMContentLoaded", () => {
       valPbr.textContent = snap.pbr != null ? `${snap.pbr}배` : "-";
 
       etfBox.classList.add("hidden");
-      financialsBox.classList.remove("hidden");
+      if ((ev.financials || []).length > 0) {
+        financialsBox.classList.remove("hidden");
+      } else {
+        financialsBox.classList.add("hidden");
+      }
+    }
+
+    if (ev.overview) {
+      document.getElementById("tab1-overview-text").textContent = ev.overview;
+      overviewBox.classList.remove("hidden");
+    } else {
+      overviewBox.classList.add("hidden");
     }
 
     // 기술지표 핵심 요약 (RSI, 볼린저 위치 %, 20일선 이격)
@@ -330,7 +345,7 @@ document.addEventListener("DOMContentLoaded", () => {
         .map((p) => {
           const sign = p.change_rate > 0 ? "+" : "";
           const color = p.change_rate > 0 ? "#dc2626" : p.change_rate < 0 ? "#2563eb" : "#374151";
-          const priceStr = p.price != null ? `${p.price.toLocaleString("ko-KR")}원` : "-";
+          const priceStr = formatPrice(p.price, p.currency || currency);
           const rateStr = p.change_rate != null ? `${sign}${p.change_rate}%` : "-";
           return `<span class="ind-badge">${escapeHtml(p.name)} ${priceStr} <span style="color:${color}">(${rateStr})</span></span>`;
         })
@@ -409,19 +424,15 @@ document.addEventListener("DOMContentLoaded", () => {
       dartFinBadges.innerHTML = "";
     }
 
-    // 공통: 최근 5일 투자자별 매매동향 (수급)
+    // 공통: 최근 5일 투자자별 매매동향 (수급) — 데이터 없을 시(미국 등) 숨김
+    const trendBox = document.getElementById("tab1-trend-box");
     const trendTbody = document.getElementById("tab1-trend-tbody");
     trendTbody.innerHTML = "";
     const trends = ev.investor_trend || [];
     if (trends.length === 0) {
-      const tr = document.createElement("tr");
-      const td = document.createElement("td");
-      td.colSpan = 5;
-      td.style.textAlign = "center";
-      td.textContent = "수급 데이터가 없습니다.";
-      tr.appendChild(td);
-      trendTbody.appendChild(tr);
+      trendBox.classList.add("hidden");
     } else {
+      trendBox.classList.remove("hidden");
       trends.forEach((t) => {
         const tr = document.createElement("tr");
         const fmtNet = (qty, eok) => {
@@ -690,7 +701,7 @@ document.addEventListener("DOMContentLoaded", () => {
       tab3LatestIndicators = data.latest;
 
       console.log(`[INDICATOR] 탭3 기술지표 계산 완료 (code=${code})`);
-      renderTechBadges(data.latest, data.name || code);
+      renderTechBadges(data.latest, data.name || code, data.currency || "KRW");
       renderTechCharts(data);
       tab3Content.classList.remove("hidden");
     } catch (err) {
@@ -703,18 +714,18 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  function renderTechBadges(latest, stockName) {
+  function renderTechBadges(latest, stockName, currency) {
     if (!latest) return;
     const items = [
       `종목: ${stockName || "-"}`,
       `기준일: ${latest.date}`,
-      `종가: ${latest.close != null ? latest.close.toLocaleString("ko-KR") + "원" : "-"}`,
-      `MA5: ${latest.ma5 != null ? latest.ma5.toLocaleString("ko-KR") : "-"}`,
-      `MA20: ${latest.ma20 != null ? latest.ma20.toLocaleString("ko-KR") : "-"}`,
-      `MA60: ${latest.ma60 != null ? latest.ma60.toLocaleString("ko-KR") : "-"}`,
+      `종가: ${formatPrice(latest.close, currency)}`,
+      `MA5: ${formatPrice(latest.ma5, currency)}`,
+      `MA20: ${formatPrice(latest.ma20, currency)}`,
+      `MA60: ${formatPrice(latest.ma60, currency)}`,
       `RSI(14): ${latest.rsi14 != null ? latest.rsi14 : "-"}`,
       `MACD: ${latest.macd != null ? latest.macd : "-"}`,
-      `볼린저 상/하: ${latest.bb_upper != null ? latest.bb_upper.toLocaleString("ko-KR") : "-"} / ${latest.bb_lower != null ? latest.bb_lower.toLocaleString("ko-KR") : "-"}`,
+      `볼린저 상/하: ${formatPrice(latest.bb_upper, currency)} / ${formatPrice(latest.bb_lower, currency)}`,
     ];
     tab3Badges.innerHTML = items.map((t) => `<span class="ind-badge">${escapeHtml(t)}</span>`).join("");
   }
@@ -808,7 +819,73 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // ==================== 공통 유틸리티 ====================
+  // ==================== 공통 유틸리티 & 자동완성 ====================
+  function setupAutocomplete(inputEl, listEl, onSelect) {
+    if (!inputEl || !listEl) return;
+    let debounceTimer = null;
+
+    inputEl.addEventListener("input", () => {
+      clearTimeout(debounceTimer);
+      const q = inputEl.value.trim();
+      if (!q) {
+        listEl.classList.add("hidden");
+        listEl.innerHTML = "";
+        return;
+      }
+      debounceTimer = setTimeout(async () => {
+        try {
+          const resp = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+          const data = await resp.json();
+          const items = data.items || [];
+          listEl.innerHTML = "";
+          if (items.length === 0) {
+            listEl.classList.add("hidden");
+            return;
+          }
+          items.forEach((it) => {
+            const li = document.createElement("li");
+            li.className = "autocomplete-item";
+            const flag = it.nation === "USA" ? "🇺🇸" : "🇰🇷";
+            li.innerHTML = `<span class="ac-name">${flag} ${escapeHtml(it.name)}</span><span class="ac-meta">${escapeHtml(it.code)} · ${escapeHtml(it.exchange || it.nation)}</span>`;
+            li.addEventListener("mousedown", (e) => {
+              e.preventDefault();
+              inputEl.value = it.code;
+              listEl.classList.add("hidden");
+              if (onSelect) onSelect(it.code);
+            });
+            listEl.appendChild(li);
+          });
+          listEl.classList.remove("hidden");
+        } catch {
+          listEl.classList.add("hidden");
+        }
+      }, 200);
+    });
+
+    inputEl.addEventListener("blur", () => {
+      setTimeout(() => listEl.classList.add("hidden"), 150);
+    });
+  }
+
+  setupAutocomplete(
+    document.getElementById("tab1-code"),
+    document.getElementById("tab1-autocomplete-list"),
+    (code) => runInitialAnalysis(code)
+  );
+  setupAutocomplete(
+    document.getElementById("tab3-code"),
+    document.getElementById("tab3-autocomplete-list"),
+    null
+  );
+
+  function formatPrice(val, currency) {
+    if (val === null || val === undefined) return "-";
+    if (currency === "USD") {
+      return `$${Number(val).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+    return `${Number(val).toLocaleString("ko-KR")}원`;
+  }
+
   async function safeParseJson(resp) {
     try {
       return await resp.json();

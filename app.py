@@ -3,7 +3,7 @@ import os
 import logging
 from flask import Flask, jsonify, render_template, request
 from dotenv import load_dotenv
-from collector import collect_stock_data
+from collector import collect_stock_data, search_stocks
 from dify_client import ask_dify_chatbot
 from rebalancer import calculate_rebalance
 from indicators import calculate_indicators
@@ -63,6 +63,16 @@ def health():
         "has_dify_tech_key": has_dify_tech_key,
         "has_dart_key": has_dart_key,
     }), 200
+
+
+@app.route("/api/search", methods=["GET"])
+def api_search():
+    """종목명 또는 코드 일부를 받아 한국·미국 주식 및 ETF 자동완성 목록을 반환한다."""
+    q = str(request.args.get("q", "")).strip()
+    if not q:
+        return jsonify({"items": []}), 200
+    items = search_stocks(q, limit=8)
+    return jsonify({"items": items}), 200
 
 
 @app.route("/fetch", methods=["POST"])
@@ -146,12 +156,15 @@ def chat_analyze():
     context_summary = {
         "code": evidence["code"],
         "name": evidence["name"],
+        "market": evidence.get("market", "KR"),
+        "currency": evidence.get("currency", "KRW"),
         "asset_type": evidence.get("asset_type", "stock"),
         "market_context": evidence.get("market_context", {}),
         "snapshot": evidence["snapshot"],
         "tech_summary": evidence.get("tech_summary"),
         "peers": evidence.get("peers", []),
         "etf_info": evidence.get("etf_info"),
+        "overview": evidence.get("overview"),
         "investor_trend": evidence.get("investor_trend", []),
         "financials": evidence["financials"],
         "dart_latest_financials": evidence.get("dart_latest_financials"),

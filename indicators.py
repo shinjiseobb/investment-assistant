@@ -3,7 +3,7 @@ import re
 from datetime import datetime, timedelta
 import FinanceDataReader as fdr
 import pandas as pd
-from collector import fetch_basic_info
+from collector import fetch_any_basic_name, resolve_query_to_symbol
 
 logger = logging.getLogger(__name__)
 
@@ -20,10 +20,17 @@ def _to_clean_list(series, decimals=2):
 
 
 def calculate_indicators(code, days=365, display_days=120):
-    """[탭 3] FinanceDataReader로 최근 주가를 수집해 MA, RSI, MACD, 볼린저밴드를 계산한다."""
-    code_str = str(code).strip() if code else ""
-    if not re.fullmatch(r"\d{6}", code_str):
-        return {"code": code_str, "error": f"올바른 6자리 종목코드가 아닙니다: '{code_str}'"}
+    """[탭 3] 한국·미국 종목/ETF/지수의 주가를 수집해 MA, RSI, MACD, 볼린저밴드를 계산한다."""
+    raw = str(code).strip() if code else ""
+    market, clean_code, _, err = resolve_query_to_symbol(raw)
+    if err or not clean_code:
+        return {"code": raw, "error": err or f"올바른 종목코드 또는 종목명이 아닙니다: '{raw}'"}
+
+    code_str = clean_code.split(".")[0] if market == "US" else clean_code
+    if code_str == "GSPC":
+        code_str = "US500"
+    currency = "USD" if market == "US" else "KRW"
+    price_decimals = 2 if currency == "USD" else 0
 
     end_date = datetime.today()
     start_date = end_date - timedelta(days=days)
@@ -80,12 +87,12 @@ def calculate_indicators(code, days=365, display_days=120):
     view_df = df.tail(display_days)
     dates = [idx.strftime("%Y-%m-%d") for idx in view_df.index]
 
-    close_list = _to_clean_list(view_df["Close"], decimals=0)
-    ma5_list = _to_clean_list(view_df["ma5"], decimals=0)
-    ma20_list = _to_clean_list(view_df["ma20"], decimals=0)
-    ma60_list = _to_clean_list(view_df["ma60"], decimals=0)
-    bb_upper_list = _to_clean_list(view_df["bb_upper"], decimals=0)
-    bb_lower_list = _to_clean_list(view_df["bb_lower"], decimals=0)
+    close_list = _to_clean_list(view_df["Close"], decimals=price_decimals)
+    ma5_list = _to_clean_list(view_df["ma5"], decimals=price_decimals)
+    ma20_list = _to_clean_list(view_df["ma20"], decimals=price_decimals)
+    ma60_list = _to_clean_list(view_df["ma60"], decimals=price_decimals)
+    bb_upper_list = _to_clean_list(view_df["bb_upper"], decimals=price_decimals)
+    bb_lower_list = _to_clean_list(view_df["bb_lower"], decimals=price_decimals)
     rsi14_list = _to_clean_list(view_df["rsi14"], decimals=2)
     macd_list = _to_clean_list(view_df["macd"], decimals=2)
     macd_signal_list = _to_clean_list(view_df["macd_signal"], decimals=2)
@@ -103,14 +110,14 @@ def calculate_indicators(code, days=365, display_days=120):
         "bb_lower": bb_lower_list[-1],
     }
 
-    b_info, _ = fetch_basic_info(code_str)
-    stock_name = b_info["name"] if b_info and b_info.get("name") else code_str
+    stock_name, _ = fetch_any_basic_name(code_str)
 
-    logger.info("[CALC] 기술지표 계산 완료 (code=%s, name=%s, latest_rsi14=%s, latest_close=%s)", code_str, stock_name, latest["rsi14"], latest["close"])
+    logger.info("[CALC] 기술지표 계산 완료 (code=%s, name=%s, currency=%s, latest_rsi14=%s, latest_close=%s)", code_str, stock_name, currency, latest["rsi14"], latest["close"])
 
     return {
         "code": code_str,
         "name": stock_name,
+        "currency": currency,
         "dates": dates,
         "close": close_list,
         "ma5": ma5_list,

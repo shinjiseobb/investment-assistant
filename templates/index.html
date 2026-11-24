@@ -33,7 +33,10 @@
       <div class="card-section">
         <h3>💬 1단계: 종목 조회 및 AI 전문가 심층분석</h3>
         <form id="tab1-load-form" class="inline-form">
-          <input type="text" id="tab1-code" placeholder="종목코드 6자리 (예: 000660)" maxlength="6" value="000660" required />
+          <div class="autocomplete-wrapper">
+            <input type="text" id="tab1-code" placeholder="종목명 또는 코드 입력 (예: 삼성전자, 애플, 000660, AAPL)" maxlength="30" value="000660" autocomplete="off" required />
+            <ul id="tab1-autocomplete-list" class="autocomplete-list hidden"></ul>
+          </div>
           <select id="tab1-mode-select" class="mode-select" aria-label="분석 모드 선택">
             <option value="expert">📊 전문가용 상세 리포트</option>
             <option value="beginner">🌱 초보자용 쉬운 해설</option>
@@ -42,10 +45,12 @@
         </form>
         <div class="quick-examples" style="margin-bottom: 14px;">
           <span>빠른 선택:</span>
-          <button type="button" class="example-btn tab1-quick-btn" data-code="000660">SK하이닉스 (000660)</button>
-          <button type="button" class="example-btn tab1-quick-btn" data-code="005930">삼성전자 (005930)</button>
-          <button type="button" class="example-btn tab1-quick-btn" data-code="069500">KODEX 200 (069500)</button>
-          <button type="button" class="example-btn tab1-quick-btn" data-code="035420">NAVER (035420)</button>
+          <button type="button" class="example-btn tab1-quick-btn" data-code="000660">SK하이닉스</button>
+          <button type="button" class="example-btn tab1-quick-btn" data-code="005930">삼성전자</button>
+          <button type="button" class="example-btn tab1-quick-btn" data-code="069500">KODEX 200</button>
+          <button type="button" class="example-btn tab1-quick-btn" data-code="AAPL">애플 (AAPL)</button>
+          <button type="button" class="example-btn tab1-quick-btn" data-code="NVDA">엔비디아 (NVDA)</button>
+          <button type="button" class="example-btn tab1-quick-btn" data-code="SPY">S&amp;P500 (SPY)</button>
         </div>
         <div id="tab1-error" class="error-box hidden"></div>
         <div id="tab1-loading" class="loading-box hidden">네이버 금융·Serper 뉴스 데이터를 수집하고 AI 애널리스트 리포트를 생성 중입니다...</div>
@@ -127,6 +132,12 @@
             <p id="tab1-etf-desc" style="font-size: 0.88rem; color: #4b5563; background: #f9fafb; padding: 12px; border-radius: 8px; border: 1px solid #e5e7eb;"></p>
           </div>
 
+          <!-- 미국 주식용: 기업 개요 -->
+          <div id="tab1-overview-box" class="hidden" style="margin-bottom: 20px;">
+            <h4 style="margin-bottom: 8px; color: #374151;">🏢 기업 개요</h4>
+            <p id="tab1-overview-text" style="font-size: 0.88rem; color: #4b5563; background: #f9fafb; padding: 12px; border-radius: 8px; border: 1px solid #e5e7eb;"></p>
+          </div>
+
           <!-- 공통: 최근 5일 투자자별 매매동향 (수급) -->
           <div id="tab1-trend-box" style="margin-bottom: 20px;">
             <h4 style="margin-bottom: 10px; color: #374151;">🏦 최근 5일 투자자별 매매동향 (수급)</h4>
@@ -188,7 +199,7 @@
       <div class="card-section">
         <h3>⚖️ 포트폴리오 리밸런싱 도우미 (최근 1년 몬테카를로 + 효율적 프론티어)</h3>
         <form id="tab2-form" class="inline-form">
-          <input type="text" id="tab2-codes" placeholder="종목/ETF 코드 2개 이상 쉼표 구분 (예: 005930, 000660, 069500)" value="005930, 000660, 069500" required />
+          <input type="text" id="tab2-codes" placeholder="한국/미국 종목명 또는 코드 2개 이상 쉼표 구분 (예: 삼성전자, AAPL, SPY)" value="005930, 000660, 069500" required />
           <button type="submit" id="tab2-submit">최적 비중 계산 (다시 계산)</button>
         </form>
         <div id="tab2-error" class="error-box hidden"></div>
@@ -229,7 +240,10 @@
       <div class="card-section">
         <h3>📈 기술지표 차트 &amp; AI 지표해석기</h3>
         <form id="tab3-load-form" class="inline-form">
-          <input type="text" id="tab3-code" placeholder="종목코드 6자리 (예: 000660)" maxlength="6" value="000660" required />
+          <div class="autocomplete-wrapper">
+            <input type="text" id="tab3-code" placeholder="한국/미국 종목명 또는 코드 (예: 000660, 애플, NVDA)" maxlength="30" value="000660" autocomplete="off" required />
+            <ul id="tab3-autocomplete-list" class="autocomplete-list hidden"></ul>
+          </div>
           <button type="submit" id="tab3-load-btn">차트 &amp; 지표 계산</button>
         </form>
         <div id="tab3-error" class="error-box hidden"></div>

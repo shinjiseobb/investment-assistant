@@ -44,6 +44,78 @@ def clean_number(value, as_float=False):
         return None
 
 
+def search_stocks(query, limit=8):
+    """네이버 자동완성 API(ac.stock.naver.com)로 한국·미국 주식 및 ETF를 검색한다."""
+    q = str(query or "").strip()
+    if not q:
+        return []
+
+    url = "https://ac.stock.naver.com/ac"
+    try:
+        resp = requests.get(
+            url,
+            params={"q": q, "target": "stock,index,marketindicator"},
+            headers=NAVER_HEADERS,
+            timeout=5,
+        )
+        if resp.status_code != 200:
+            return []
+        items = resp.json().get("items") or []
+    except Exception as e:
+        logger.warning("[NAVER] 자동완성 검색 실패 (q=%s): %s", q, e)
+        return []
+
+    results = []
+    for it in items:
+        nation = it.get("nationCode") or ""
+        if nation not in ("KOR", "USA"):
+            continue
+        code = (it.get("code") or "").strip()
+        reuters_code = (it.get("reutersCode") or code).strip()
+        name = (it.get("name") or "").strip()
+        exchange = (it.get("typeCode") or "").strip()
+        if not code or not name:
+            continue
+        results.append({
+            "code": code,
+            "reuters_code": reuters_code,
+            "name": name,
+            "nation": nation,
+            "exchange": exchange,
+        })
+        if len(results) >= limit:
+            break
+    return results
+
+
+def resolve_query_to_symbol(raw_input):
+    """사용자 입력(6자리 숫자, 영문 티커, 한글/자연어 종목명)을 (market, code, reuters_code)로 해석한다."""
+    text = str(raw_input or "").strip()
+    if not text:
+        return None, None, None, "종목코드 또는 종목명을 입력해 주세요."
+
+    # 1. 한국 6자리 숫자 코드
+    if re.fullmatch(r"\d{6}", text):
+        return "KR", text, text, None
+
+    # 2. 자동완성 API로 자연어(한글명) 또는 영문 티커(AAPL, SPY, ^GSPC 등) 조회
+    matches = search_stocks(text, limit=5)
+    if matches:
+        upper_text = text.upper()
+        # 정확히 일치하는 코드가 있으면 최우선 선택
+        exact = next((m for m in matches if m["code"].upper() == upper_text or m["reuters_code"].upper() == upper_text), None)
+        chosen = exact or matches[0]
+        market = "KR" if chosen["nation"] == "KOR" else "US"
+        return market, chosen["code"], chosen["reuters_code"], None
+
+    # 3. 영문 티커 형식이면 미국 시장으로 직접 시도
+    if re.fullmatch(r"[A-Za-z.\-^=]{1,12}", text):
+        upper_text = text.upper()
+        return "US", upper_text, upper_text, None
+
+    return None, None, None, f"'{text}'에 해당하는 국내/미국 종목을 찾을 수 없습니다."
+
+
 def parse_korean_market_cap(value):
     """'895조 5,836억' 또는 '5,836억' 형태의 시가총액 문자열을 원(KRW) 단위 순수 정수로 변환한다."""
     if value is None:
@@ -240,14 +312,21 @@ def fetch_integration_info(code, asset_type="stock"):
     }, None
 
 
-def fetch_market_context():
-    """FinanceDataReader로 오늘의 코스피(KS11), 코스닥(KQ11), 원/달러 환율(USD/KRW)을 조회한다."""
+def fetch_market_context(market="KR"):
+    """FinanceDataReader로 오늘의 주요 지수(한국: 코스피/코스닥, 미국: S&P500/나스닥)와 원/달러 환율을 조회한다."""
     start_str = (datetime.today() - timedelta(days=14)).strftime("%Y-%m-%d")
-    symbols = {
-        "kospi": ("KS11", "코스피"),
-        "kosdaq": ("KQ11", "코스닥"),
-        "usd_krw": ("USD/KRW", "원/달러"),
-    }
+    if market == "US":
+        symbols = {
+            "sp500": ("US500", "S&P500"),
+            "nasdaq": ("IXIC", "나스닥"),
+            "usd_krw": ("USD/KRW", "원/달러"),
+        }
+    else:
+        symbols = {
+            "kospi": ("KS11", "코스피"),
+            "kosdaq": ("KQ11", "코스닥"),
+            "usd_krw": ("USD/KRW", "원/달러"),
+        }
     context = {}
     for key, (sym, label) in symbols.items():
         try:
@@ -265,6 +344,27 @@ def fetch_market_context():
         except Exception as e:
             logger.warning("[FDR] 시장 지표 조회 실패 (%s): %s", sym, e)
     return context
+
+
+def fetch_any_basic_name(code):
+    """한국 6자리 또는 미국 티커의 정식 종목명과 통화(KRW/USD)를 빠르게 조회한다."""
+    market, clean_code, reuters_code, err = resolve_query_to_symbol(code)
+    if err or not clean_code:
+        return code, "KRW"
+
+    if market == "KR":
+        info, _ = fetch_basic_info(clean_code)
+        return (info["name"] if info and info.get("name") else clean_code), "KRW"
+
+    try:
+        r = requests.get(f"https://api.stock.naver.com/stock/{reuters_code}/basic", headers=NAVER_HEADERS, timeout=5)
+        if r.status_code == 200:
+            name = r.json().get("stockName")
+            if name:
+                return name, "USD"
+    except Exception:
+        pass
+    return clean_code, "USD"
 
 
 def build_tech_summary(code):
@@ -418,20 +518,158 @@ def fetch_serper_news(stock_name, num=5):
     return news_list, None
 
 
+def _collect_us_stock_data(code, reuters_code, result):
+    """미국 주식·ETF·지수 파이프라인 (네이버 해외 API + FDR + Serper 글로벌 뉴스)"""
+    result["market"] = "US"
+    result["currency"] = "USD"
+    result["code"] = code
+
+    basic_url = f"https://api.stock.naver.com/stock/{reuters_code}/basic"
+    logger.info("[NAVER-US] 해외주식 API 접근 시작 (url=%s)", basic_url)
+
+    naver_ok = False
+    stock_name = code
+    is_etf = False
+
+    try:
+        resp = requests.get(basic_url, headers=NAVER_HEADERS, timeout=REQUEST_TIMEOUT)
+        if resp.status_code == 200:
+            bdata = resp.json()
+            naver_ok = True
+            stock_name = bdata.get("stockName") or bdata.get("stockNameEng") or code
+            is_etf = bool(bdata.get("isEtf") or bdata.get("isEtfAmerica") or bdata.get("stockEndType") == "etf")
+
+            result["name"] = stock_name
+            result["asset_type"] = "etf" if is_etf else "stock"
+            result["snapshot"]["current_price"] = clean_number(bdata.get("closePriceRaw") or bdata.get("closePrice"), as_float=True)
+            result["snapshot"]["change_rate"] = clean_number(bdata.get("fluctuationsRatioRaw") or bdata.get("fluctuationsRatio"), as_float=True)
+
+            # 원화 환산 시총 또는 달러 문자열 파싱
+            info_map = {it.get("code"): it.get("value") for it in (bdata.get("stockItemTotalInfos") or []) if it.get("code")}
+            result["snapshot"]["per"] = clean_number(info_map.get("per"), as_float=True)
+            result["snapshot"]["pbr"] = clean_number(info_map.get("pbr"), as_float=True)
+            result["snapshot"]["market_cap_text"] = info_map.get("marketValue")  # 예: '5조 729억 USD'
+            if bdata.get("marketValueKrwRaw"):
+                result["snapshot"]["market_cap"] = clean_number(bdata.get("marketValueKrwRaw"), as_float=False)
+
+            if is_etf:
+                result["etf_info"] = {
+                    "issuer": info_map.get("issuerName") or bdata.get("stockExchangeName"),
+                    "base_index": info_map.get("industryGroupKor") or "미국 지수/섹터",
+                    "nav": clean_number(info_map.get("nav"), as_float=True),
+                    "deviation_rate": None,
+                    "total_fee": clean_number(info_map.get("totalFee"), as_float=True),
+                    "dividend_yield": clean_number(info_map.get("dividendYieldRatio"), as_float=True),
+                    "return_1m": None,
+                    "return_3m": None,
+                    "return_6m": None,
+                    "return_1y": None,
+                    "description": f"{stock_name} ({bdata.get('stockNameEng') or code}) — 미국 {bdata.get('stockExchangeName') or '증시'} 상장 ETF",
+                }
+    except Exception as e:
+        logger.warning("[NAVER-US] basic 조회 실패 (%s): %s", reuters_code, e)
+
+    # 네이버 해외 integration (기업 개요 + 미국 경쟁사 비교)
+    if naver_ok:
+        try:
+            int_resp = requests.get(f"https://api.stock.naver.com/stock/{reuters_code}/integration", headers=NAVER_HEADERS, timeout=REQUEST_TIMEOUT)
+            if int_resp.status_code == 200:
+                idata = int_resp.json()
+                comp_raw = idata.get("industryCompareInfo")
+                if isinstance(comp_raw, dict):
+                    comp_list = comp_raw.get("compareList") or comp_raw.get("list") or []
+                elif isinstance(comp_raw, list):
+                    comp_list = comp_raw
+                else:
+                    comp_list = []
+                peers = []
+                for p in comp_list[:5]:
+                    p_name = p.get("stockName")
+                    p_code = p.get("symbolCode") or p.get("reutersCode")
+                    if p_code and p_name:
+                        p_ratio = clean_number(p.get("fluctuationsRatio"), as_float=True)
+                        comp_name = (p.get("compareToPreviousPrice") or {}).get("name", "")
+                        if p_ratio is not None and comp_name == "FALLING" and p_ratio > 0:
+                            p_ratio = -p_ratio
+                        peers.append({
+                            "code": p_code,
+                            "name": p_name,
+                            "price": clean_number(p.get("closePrice"), as_float=True),
+                            "change_rate": p_ratio,
+                            "currency": "USD",
+                        })
+                result["peers"] = peers
+                if result["etf_info"] and idata.get("corporateOverview"):
+                    result["etf_info"]["description"] = idata["corporateOverview"]
+                elif not is_etf and idata.get("corporateOverview"):
+                    result["overview"] = idata["corporateOverview"]
+        except Exception as e:
+            logger.warning("[NAVER-US] integration 조회 실패 (%s): %s", reuters_code, e)
+
+    # FDR로 미국 주가 기반 기술지표 & (네이버 미지원 시세/지수일 경우) 종가 보완
+    fdr_symbol = code.split(".")[0]
+    if fdr_symbol == "GSPC":
+        fdr_symbol = "US500"
+    result["market_context"] = fetch_market_context(market="US")
+    result["tech_summary"] = build_tech_summary(fdr_symbol)
+
+    if not result["name"] or result["snapshot"]["current_price"] is None:
+        # FDR에서 직접 지수/종목 종가 보완 (예: ^GSPC, QQQ 등)
+        try:
+            start_str = (datetime.today() - timedelta(days=14)).strftime("%Y-%m-%d")
+            df = fdr.DataReader(fdr_symbol, start_str)
+            if df is not None and not df.empty and "Close" in df.columns:
+                closes = df["Close"].dropna()
+                curr = round(float(closes.iloc[-1]), 2)
+                prev = float(closes.iloc[-2]) if len(closes) >= 2 else curr
+                chg = round(((curr - prev) / prev) * 100, 2) if prev else 0.0
+                if not result["name"]:
+                    result["name"] = code
+                result["snapshot"]["current_price"] = curr
+                result["snapshot"]["change_rate"] = chg
+        except Exception as e:
+            logger.warning("[FDR-US] 종가 보완 실패 (%s): %s", fdr_symbol, e)
+
+    if not result["name"]:
+        result["errors"].append(f"미국 종목 '{code}'의 시세 정보를 찾을 수 없습니다.")
+        return result
+
+    # Serper 뉴스 (한글 종목명 + 티커 조합으로 검색)
+    news_query = f"{result['name']} {fdr_symbol}" if result["name"] != fdr_symbol else f"{fdr_symbol} stock"
+    news_list, err = fetch_serper_news(news_query)
+    if err:
+        result["errors"].append(err)
+    else:
+        result["news"] = news_list
+
+    logger.info(
+        "[RESPONSE] 미국 종목 수집 완료 (code=%s, name=%s, price=%s, news=%d)",
+        result["code"],
+        result["name"],
+        result["snapshot"]["current_price"],
+        len(result["news"]),
+    )
+    return result
+
+
 def collect_stock_data(code):
-    """종목 데이터 수집 통합 함수 (주식/ETF 자동 분기 + 최근 5일 수급 + Serper 뉴스)"""
+    """종목 데이터 수집 통합 함수 (한국/미국 자동 판별 + 자연어 검색 변환 + 주식/ETF 분기)"""
     result = {
         "code": str(code).strip() if code else "",
         "name": None,
+        "market": "KR",
+        "currency": "KRW",
         "asset_type": "stock",
         "snapshot": {
             "current_price": None,
             "change_rate": None,
             "market_cap": None,
+            "market_cap_text": None,
             "per": None,
             "pbr": None,
         },
         "etf_info": None,
+        "overview": None,
         "investor_trend": [],
         "peers": [],
         "market_context": {},
@@ -443,12 +681,17 @@ def collect_stock_data(code):
         "errors": [],
     }
 
-    valid_code, err = validate_code(code)
+    market, valid_code, reuters_code, err = resolve_query_to_symbol(code)
     if err:
         result["errors"].append(err)
         return result
 
+    if market == "US":
+        return _collect_us_stock_data(valid_code, reuters_code, result)
+
     result["code"] = valid_code
+    result["market"] = "KR"
+    result["currency"] = "KRW"
 
     basic_info, err = fetch_basic_info(valid_code)
     if err:

@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import FinanceDataReader as fdr
 import numpy as np
 import pandas as pd
-from collector import fetch_basic_info
+from collector import fetch_any_basic_name, resolve_query_to_symbol
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +13,7 @@ RISK_FREE_RATE = 0.035  # 무위험 수익률 연 3.5% 가정
 
 
 def parse_and_validate_codes(raw_codes):
-    """입력된 종목코드 목록(문자열 또는 리스트)을 정제하고 6자리 숫자 2개 이상인지 검증한다."""
+    """입력된 종목코드/티커/종목명 목록을 정제하고 유효한 2개 이상 코드로 변환한다."""
     if isinstance(raw_codes, str):
         items = [c.strip() for c in re.split(r"[,\s]+", raw_codes) if c.strip()]
     elif isinstance(raw_codes, list):
@@ -21,17 +21,19 @@ def parse_and_validate_codes(raw_codes):
     else:
         items = []
 
-    # 순서 유지하며 중복 제거
-    unique_codes = list(dict.fromkeys(items))
+    resolved_codes = []
+    for item in items:
+        market, clean_code, _, err = resolve_query_to_symbol(item)
+        if err or not clean_code:
+            return None, err or f"올바른 종목코드 또는 종목명이 아닙니다: '{item}'"
+        fdr_code = clean_code.split(".")[0] if market == "US" else clean_code
+        if fdr_code not in resolved_codes:
+            resolved_codes.append(fdr_code)
 
-    if len(unique_codes) < 2:
-        return None, "리밸런싱을 계산하려면 서로 다른 종목코드를 2개 이상 입력해 주세요. (예: 005930, 000660, 069500)"
+    if len(resolved_codes) < 2:
+        return None, "리밸런싱을 계산하려면 서로 다른 종목(한국/미국)을 2개 이상 입력해 주세요. (예: 005930, AAPL, SPY)"
 
-    for code in unique_codes:
-        if not re.fullmatch(r"\d{6}", code):
-            return None, f"올바른 6자리 종목코드가 아닙니다: '{code}'"
-
-    return unique_codes, None
+    return resolved_codes, None
 
 
 def fetch_close_prices(codes, days=365):
@@ -125,11 +127,11 @@ def calculate_rebalance(raw_codes, num_simulations=3000):
         for i in range(0, num_simulations, step)
     ]
 
-    # 종목명 매핑 조회 (실패 시 종목코드 그대로 사용)
+    # 종목명 매핑 조회 (한국/미국 모두 지원)
     names = {}
     for code in codes:
-        b_info, _ = fetch_basic_info(code)
-        names[code] = b_info["name"] if b_info and b_info.get("name") else code
+        name, _ = fetch_any_basic_name(code)
+        names[code] = name or code
 
     logger.info(
         "[CALC] 몬테카를로/프론티어 계산 완료 (codes=%s, sharpe=%s, optimal=%s)",
