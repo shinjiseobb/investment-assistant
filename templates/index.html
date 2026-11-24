@@ -23,6 +23,7 @@
         <button type="button" class="tab-btn active" data-tab="1">종목 분석</button>
         <button type="button" class="tab-btn" data-tab="2">포트폴리오 리밸런싱</button>
         <button type="button" class="tab-btn" data-tab="3">차트 · 기술지표</button>
+        <button type="button" class="tab-btn" data-tab="4">종목 발굴</button>
       </nav>
       <a href="/test" class="test-link">수집기 테스트</a>
     </div>
@@ -296,6 +297,72 @@
               <button type="submit" id="tab3-chat-btn" class="primary-btn">해설 요청</button>
             </form>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== 탭 4: 종목 발굴 (스크리너) ==================== -->
+    <section id="tab-4" class="tab-panel hidden">
+      <div class="card-section">
+        <div class="screener-top">
+          <div>
+            <h3 class="panel-heading">종목 발굴 스크리너</h3>
+            <p class="panel-desc" style="margin-bottom: 0;">조건에 맞는 한국(KRX) 및 미국(S&amp;P500) 종목을 걸러낸 뒤, 바로 심층분석이나 차트로 연결할 수 있습니다.</p>
+          </div>
+          <span id="tab4-total-count" class="code-badge">0개 발견</span>
+        </div>
+
+        <!-- 원클릭 전략 프리셋 칩 -->
+        <div class="quick-examples" style="margin-top: 14px; margin-bottom: 14px;">
+          <span class="quick-label">추천 전략</span>
+          <button type="button" class="example-btn preset-chip active" data-preset="large">시총 10조↑ 대형주</button>
+          <button type="button" class="example-btn preset-chip" data-preset="gainers">오늘 급등주 (+3%↑)</button>
+          <button type="button" class="example-btn preset-chip" data-preset="losers">오늘 낙폭주 (-3%↓)</button>
+          <button type="button" class="example-btn preset-chip" data-preset="under10k">1만 원 이하 소액주</button>
+          <button type="button" class="example-btn preset-chip" data-preset="sp500">미국 S&amp;P500</button>
+        </div>
+
+        <!-- 조건 필터 바 -->
+        <form id="tab4-filter-form" class="screener-filters">
+          <select id="tab4-market" class="mode-select">
+            <option value="KR">한국 (KRX)</option>
+            <option value="US">미국 (S&amp;P500)</option>
+          </select>
+          <select id="tab4-cap" class="mode-select">
+            <option value="0">시가총액 전체</option>
+            <option value="1">1조 원 이상</option>
+            <option value="10" selected>10조 원 이상</option>
+          </select>
+          <select id="tab4-change" class="mode-select">
+            <option value="">등락률 전체</option>
+            <option value="up3">상승 +3% 이상</option>
+            <option value="down3">하락 -3% 이하</option>
+          </select>
+          <select id="tab4-sector" class="mode-select">
+            <option value="">시장/섹터 전체</option>
+          </select>
+          <input type="text" id="tab4-keyword" placeholder="종목명 또는 코드 검색" autocomplete="off" />
+          <button type="submit" id="tab4-search-btn" class="primary-btn">필터 적용</button>
+        </form>
+
+        <div id="tab4-error" class="error-box hidden"></div>
+
+        <!-- 결과 테이블 -->
+        <div class="table-wrapper" style="margin-top: 14px;">
+          <table class="finance-table screener-table">
+            <thead>
+              <tr>
+                <th style="text-align: center;">코드</th>
+                <th style="text-align: left;">종목명</th>
+                <th style="text-align: center;">시장 / 섹터</th>
+                <th class="sortable-th" data-sort="price">현재가 ↕</th>
+                <th class="sortable-th" data-sort="change_rate">등락률 ↕</th>
+                <th class="sortable-th" data-sort="market_cap">시가총액 ↕</th>
+                <th style="text-align: center;">연결</th>
+              </tr>
+            </thead>
+            <tbody id="tab4-tbody"></tbody>
+          </table>
         </div>
       </div>
     </section>

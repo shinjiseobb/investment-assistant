@@ -754,3 +754,72 @@ input:disabled {
   padding: 16px;
   background-color: #ffffff;
 }
+
+/* ==================== 탭 4: 종목 발굴 스크리너 ==================== */
+.screener-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.screener-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.screener-filters input[type="text"] {
+  flex: 1;
+  min-width: 150px;
+  padding: 9px 12px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  outline: none;
+}
+
+.screener-filters input[type="text"]:focus {
+  border-color: #0f172a;
+}
+
+.preset-chip.active {
+  background-color: #0f172a;
+  color: #ffffff;
+}
+
+.sortable-th {
+  cursor: pointer;
+  user-select: none;
+}
+
+.sortable-th:hover {
+  color: #0f172a;
+  background-color: #f1f5f9;
+}
+
+.action-btn-group {
+  display: inline-flex;
+  gap: 5px;
+}
+
+.action-btn-sm {
+  padding: 4px 9px;
+  font-size: 0.78rem;
+  font-family: inherit;
+  font-weight: 600;
+  border-radius: 5px;
+  border: 1px solid #cbd5e1;
+  background-color: #ffffff;
+  color: #0f172a;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.action-btn-sm:hover {
+  background-color: #0f172a;
+  color: #ffffff;
+  border-color: #0f172a;
+}

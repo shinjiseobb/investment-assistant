@@ -7,6 +7,7 @@ from collector import collect_stock_data, search_stocks
 from dify_client import ask_dify_chatbot
 from rebalancer import calculate_rebalance
 from indicators import calculate_indicators
+from screener import run_screener
 
 # .env 환경변수 로드
 load_dotenv()
@@ -285,6 +286,28 @@ def chat_tech():
         "conversation_id": dify_res["conversation_id"],
         "error": dify_res["error"],
     }), 200
+
+
+@app.route("/api/screener", methods=["POST"])
+def api_screener():
+    """[탭 4] 한국(KRX) 및 미국(S&P500) 종목 스크리너 조건 필터링 결과를 반환한다."""
+    payload = request.get_json(silent=True) or {}
+    logger.info("[REQUEST] POST /api/screener market=%s", payload.get("market", "KR"))
+
+    result = run_screener(
+        market=str(payload.get("market", "KR")).upper(),
+        min_cap_trillion=payload.get("min_cap_trillion", 0) or 0,
+        max_price=payload.get("max_price", 0) or 0,
+        min_change=payload.get("min_change"),
+        max_change=payload.get("max_change"),
+        sector=payload.get("sector", ""),
+        keyword=payload.get("keyword", ""),
+        sort_by=payload.get("sort_by", "market_cap"),
+        sort_dir=payload.get("sort_dir", "desc"),
+        limit=int(payload.get("limit", 50)),
+    )
+    status_code = 400 if result.get("error") else 200
+    return jsonify(result), status_code
 
 if __name__ == "__main__":
     debug_mode = os.getenv("FLASK_DEBUG", "false").lower() == "true"

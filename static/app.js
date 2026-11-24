@@ -19,6 +19,9 @@ document.addEventListener("DOMContentLoaded", () => {
       "#tab2-submit",
       "#tab3-load-btn",
       "#tab3-chat-btn",
+      "#tab4-search-btn",
+      ".preset-chip",
+      ".action-btn-sm",
     ];
     selectors.forEach((sel) => {
       document.querySelectorAll(sel).forEach((el) => {
@@ -48,25 +51,31 @@ document.addEventListener("DOMContentLoaded", () => {
   // ==================== 1. 탭 전환 로직 ====================
   const tabBtns = document.querySelectorAll(".tab-btn");
   const tabPanels = document.querySelectorAll(".tab-panel");
+  let tab4Initialized = false;
+
+  function switchTab(targetTab) {
+    console.log(`[TAB] 탭 전환 (tab=${targetTab})`);
+    tabBtns.forEach((b) => b.classList.toggle("active", b.getAttribute("data-tab") === targetTab));
+    tabPanels.forEach((panel) => {
+      if (panel.id === `tab-${targetTab}`) {
+        panel.classList.remove("hidden");
+        panel.classList.add("active");
+      } else {
+        panel.classList.add("hidden");
+        panel.classList.remove("active");
+      }
+    });
+
+    if (targetTab === "4" && !tab4Initialized) {
+      tab4Initialized = true;
+      loadScreener();
+    }
+  }
 
   tabBtns.forEach((btn) => {
     btn.addEventListener("click", () => {
       if (isAppBusy) return;
-      const targetTab = btn.getAttribute("data-tab");
-      console.log(`[TAB] 탭 전환 (tab=${targetTab})`);
-
-      tabBtns.forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-
-      tabPanels.forEach((panel) => {
-        if (panel.id === `tab-${targetTab}`) {
-          panel.classList.remove("hidden");
-          panel.classList.add("active");
-        } else {
-          panel.classList.add("hidden");
-          panel.classList.remove("active");
-        }
-      });
+      switchTab(btn.getAttribute("data-tab"));
     });
   });
 
@@ -946,6 +955,248 @@ document.addEventListener("DOMContentLoaded", () => {
       hideProgress();
     }
   });
+
+  // ==================== 5. 탭 4: 종목 발굴 스크리너 ====================
+  const tab4FilterForm = document.getElementById("tab4-filter-form");
+  const tab4Market = document.getElementById("tab4-market");
+  const tab4Cap = document.getElementById("tab4-cap");
+  const tab4Change = document.getElementById("tab4-change");
+  const tab4Sector = document.getElementById("tab4-sector");
+  const tab4Keyword = document.getElementById("tab4-keyword");
+  const tab4Tbody = document.getElementById("tab4-tbody");
+  const tab4Error = document.getElementById("tab4-error");
+  const tab4TotalCount = document.getElementById("tab4-total-count");
+  const presetChips = document.querySelectorAll(".preset-chip");
+
+  let tab4SortBy = "market_cap";
+  let tab4SortDir = "desc";
+  let tab4MaxPrice = 0;
+
+  if (tab4FilterForm) {
+    tab4FilterForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      if (isAppBusy) return;
+      tab4MaxPrice = 0;
+      presetChips.forEach((c) => c.classList.remove("active"));
+      loadScreener();
+    });
+
+    tab4Market.addEventListener("change", () => {
+      if (isAppBusy) return;
+      tab4Sector.value = "";
+      tab4MaxPrice = 0;
+      if (tab4Market.value === "US") {
+        tab4Cap.disabled = true;
+        tab4Change.disabled = true;
+        tab4SortBy = "code";
+        tab4SortDir = "asc";
+      } else {
+        tab4Cap.disabled = false;
+        tab4Change.disabled = false;
+        tab4SortBy = "market_cap";
+        tab4SortDir = "desc";
+      }
+      loadScreener();
+    });
+
+    presetChips.forEach((chip) => {
+      chip.addEventListener("click", () => {
+        if (isAppBusy) return;
+        presetChips.forEach((c) => c.classList.remove("active"));
+        chip.classList.add("active");
+
+        const preset = chip.getAttribute("data-preset");
+        tab4Keyword.value = "";
+        tab4Sector.value = "";
+        tab4MaxPrice = 0;
+
+        if (preset === "sp500") {
+          tab4Market.value = "US";
+          tab4Cap.disabled = true;
+          tab4Change.disabled = true;
+          tab4SortBy = "code";
+          tab4SortDir = "asc";
+        } else {
+          tab4Market.value = "KR";
+          tab4Cap.disabled = false;
+          tab4Change.disabled = false;
+          tab4SortBy = "market_cap";
+          tab4SortDir = "desc";
+          tab4Cap.value = "0";
+          tab4Change.value = "";
+
+          if (preset === "large") {
+            tab4Cap.value = "10";
+          } else if (preset === "gainers") {
+            tab4Cap.value = "1";
+            tab4Change.value = "up3";
+            tab4SortBy = "change_rate";
+          } else if (preset === "losers") {
+            tab4Cap.value = "1";
+            tab4Change.value = "down3";
+            tab4SortBy = "change_rate";
+            tab4SortDir = "asc";
+          } else if (preset === "under10k") {
+            tab4MaxPrice = 10000;
+            tab4Cap.value = "0";
+          }
+        }
+        loadScreener();
+      });
+    });
+
+    document.querySelectorAll(".sortable-th").forEach((th) => {
+      th.addEventListener("click", () => {
+        if (isAppBusy || tab4Market.value === "US") return;
+        const col = th.getAttribute("data-sort");
+        if (tab4SortBy === col) {
+          tab4SortDir = tab4SortDir === "desc" ? "asc" : "desc";
+        } else {
+          tab4SortBy = col;
+          tab4SortDir = "desc";
+        }
+        loadScreener();
+      });
+    });
+  }
+
+  async function loadScreener() {
+    if (!tab4Tbody) return;
+    tab4Error.classList.add("hidden");
+    setAppBusy(true);
+    showProgress(45, "종목 스크리너 목록을 불러오는 중입니다...");
+
+    const chgVal = tab4Change.value;
+    const payload = {
+      market: tab4Market.value,
+      min_cap_trillion: tab4Cap.value,
+      max_price: tab4MaxPrice,
+      min_change: chgVal === "up3" ? 3 : null,
+      max_change: chgVal === "down3" ? -3 : null,
+      sector: tab4Sector.value,
+      keyword: tab4Keyword.value.trim(),
+      sort_by: tab4SortBy,
+      sort_dir: tab4SortDir,
+      limit: 50,
+    };
+
+    try {
+      const resp = await fetch("/api/screener", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await safeParseJson(resp);
+      if (!resp.ok || !data || data.error) {
+        tab4Error.textContent = (data && data.error) || "스크리너 데이터를 불러오지 못했습니다.";
+        tab4Error.classList.remove("hidden");
+        return;
+      }
+
+      // 섹터 드롭다운 동기화
+      const prevSector = tab4Sector.value;
+      tab4Sector.innerHTML = `<option value="">${data.market === "US" ? "전체 섹터" : "시장 전체 (KOSPI/KOSDAQ)"}</option>`;
+      (data.sectors || []).forEach((s) => {
+        const opt = document.createElement("option");
+        opt.value = s;
+        opt.textContent = s;
+        tab4Sector.appendChild(opt);
+      });
+      if (prevSector && (data.sectors || []).includes(prevSector)) {
+        tab4Sector.value = prevSector;
+      }
+
+      tab4TotalCount.textContent = `${data.total.toLocaleString("ko-KR")}개 발견`;
+      renderScreenerTable(data.items || [], data.market);
+      showProgress(100, "조회 완료");
+    } catch (err) {
+      console.error("[ERROR] 스크리너 오류:", err.message);
+      tab4Error.textContent = "서버와 통신하는 중 오류가 발생했습니다.";
+      tab4Error.classList.remove("hidden");
+    } finally {
+      setAppBusy(false);
+      hideProgress();
+    }
+  }
+
+  function renderScreenerTable(items, market) {
+    tab4Tbody.innerHTML = "";
+    if (items.length === 0) {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 7;
+      td.style.textAlign = "center";
+      td.textContent = "조건에 맞는 종목이 없습니다.";
+      tr.appendChild(td);
+      tab4Tbody.appendChild(tr);
+      return;
+    }
+
+    items.forEach((it) => {
+      const tr = document.createElement("tr");
+
+      const tdCode = document.createElement("td");
+      tdCode.textContent = it.code;
+
+      const tdName = document.createElement("td");
+      tdName.style.textAlign = "left";
+      tdName.style.fontWeight = "600";
+      tdName.textContent = it.name;
+
+      const tdSub = document.createElement("td");
+      tdSub.textContent = it.sub || "-";
+
+      const tdPrice = document.createElement("td");
+      tdPrice.textContent = it.price != null ? formatPrice(it.price, market === "US" ? "USD" : "KRW") : "-";
+
+      const tdChg = document.createElement("td");
+      if (it.change_rate != null) {
+        const sign = it.change_rate > 0 ? "+" : "";
+        tdChg.textContent = `${sign}${it.change_rate}%`;
+        tdChg.style.color = it.change_rate > 0 ? "#e11d48" : it.change_rate < 0 ? "#2563eb" : "";
+        tdChg.style.fontWeight = "600";
+      } else {
+        tdChg.textContent = "-";
+      }
+
+      const tdCap = document.createElement("td");
+      tdCap.textContent = it.market_cap != null ? formatKoreanCurrency(it.market_cap) : (it.industry || "-");
+
+      const tdAct = document.createElement("td");
+      tdAct.style.textAlign = "center";
+      const grp = document.createElement("div");
+      grp.className = "action-btn-group";
+
+      const btnAnalyze = document.createElement("button");
+      btnAnalyze.type = "button";
+      btnAnalyze.className = "action-btn-sm";
+      btnAnalyze.textContent = "AI 분석";
+      btnAnalyze.addEventListener("click", () => {
+        if (isAppBusy) return;
+        tab1CodeInput.value = it.code;
+        switchTab("1");
+        runInitialAnalysis(it.code);
+      });
+
+      const btnChart = document.createElement("button");
+      btnChart.type = "button";
+      btnChart.className = "action-btn-sm";
+      btnChart.textContent = "차트";
+      btnChart.addEventListener("click", () => {
+        if (isAppBusy) return;
+        tab3CodeInput.value = it.code;
+        switchTab("3");
+        tab3LoadForm.dispatchEvent(new Event("submit"));
+      });
+
+      grp.append(btnAnalyze, btnChart);
+      tdAct.appendChild(grp);
+
+      tr.append(tdCode, tdName, tdSub, tdPrice, tdChg, tdCap, tdAct);
+      tab4Tbody.appendChild(tr);
+    });
+  }
 
   // ==================== 공통 유틸리티 & 자동완성 ====================
   function setupAutocomplete(inputEl, listEl, onSelect) {
