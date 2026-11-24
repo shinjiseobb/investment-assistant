@@ -552,6 +552,13 @@ def _collect_us_stock_data(code, reuters_code, result):
             if bdata.get("marketValueKrwRaw"):
                 result["snapshot"]["market_cap"] = clean_number(bdata.get("marketValueKrwRaw"), as_float=False)
 
+            result["us_highlights"] = {
+                "high_52w": clean_number(info_map.get("highPriceOf52Weeks"), as_float=True),
+                "low_52w": clean_number(info_map.get("lowPriceOf52Weeks"), as_float=True),
+                "dividend_yield": clean_number(info_map.get("dividendYieldRatio"), as_float=True),
+                "dividend": clean_number(info_map.get("dividend"), as_float=True),
+            }
+
             if is_etf:
                 result["etf_info"] = {
                     "issuer": info_map.get("issuerName") or bdata.get("stockExchangeName"),
@@ -599,12 +606,69 @@ def _collect_us_stock_data(code, reuters_code, result):
                             "currency": "USD",
                         })
                 result["peers"] = peers
-                if result["etf_info"] and idata.get("corporateOverview"):
-                    result["etf_info"]["description"] = idata["corporateOverview"]
+
+                # 월가 애널리스트 컨센서스 (목표주가, 투자의견)
+                cons = idata.get("consensusInfo") or {}
+                if cons.get("priceTargetMean"):
+                    result["consensus"] = {
+                        "target_mean": clean_number(cons.get("priceTargetMean"), as_float=True),
+                        "target_high": clean_number(cons.get("priceTargetHigh"), as_float=True),
+                        "target_low": clean_number(cons.get("priceTargetLow"), as_float=True),
+                        "recomm_mean": clean_number(cons.get("recommMean"), as_float=True),
+                        "date": cons.get("createDate"),
+                    }
+
+                # 한국어 기업 상세 요약 & 프로필
+                summ = idata.get("summaries") or {}
+                if summ.get("summary"):
+                    result["overview"] = summ["summary"]
+                    result["company_profile"] = {
+                        "ceo": summ.get("representativeName"),
+                        "employees": summ.get("employees"),
+                        "city": summ.get("city"),
+                        "url": summ.get("url"),
+                    }
                 elif not is_etf and idata.get("corporateOverview"):
                     result["overview"] = idata["corporateOverview"]
+
+                if result["etf_info"] and idata.get("corporateOverview"):
+                    result["etf_info"]["description"] = idata["corporateOverview"]
         except Exception as e:
             logger.warning("[NAVER-US] integration 조회 실패 (%s): %s", reuters_code, e)
+
+    # 미국 일반 주식 연간 재무제표 (매출액, EBIT 영업이익, PER)
+    if naver_ok and not is_etf:
+        try:
+            fin_resp = requests.get(f"https://api.stock.naver.com/stock/{reuters_code}/finance/annual", headers=NAVER_HEADERS, timeout=REQUEST_TIMEOUT)
+            if fin_resp.status_code == 200:
+                fdata = fin_resp.json()
+                tr_titles = fdata.get("trTitleList") or []
+                row_map = {r.get("title"): r.get("columns", {}) for r in (fdata.get("rowList") or []) if r.get("title")}
+                us_fin = []
+                for col in tr_titles:
+                    col_key = col.get("key") or col.get("title")
+                    if not col_key:
+                        continue
+                    period_title = (col.get("title") or col_key).strip()
+                    rev_raw = (row_map.get("매출액", {}).get(col_key) or {}).get("value")
+                    ebit_raw = (row_map.get("EBIT", {}).get(col_key) or {}).get("value")
+                    per_raw = (row_map.get("PER", {}).get(col_key) or {}).get("value")
+
+                    # 단위: 백만 USD -> 순수 USD 정수
+                    rev_m = clean_number(rev_raw, as_float=True)
+                    ebit_m = clean_number(ebit_raw, as_float=True)
+                    us_fin.append({
+                        "period": period_title[:7],
+                        "period_type": "annual",
+                        "is_consensus": col.get("isConsensus") == "Y",
+                        "revenue": int(rev_m * 1_000_000) if rev_m is not None else None,
+                        "operating_income": int(ebit_m * 1_000_000) if ebit_m is not None else None,
+                        "per": clean_number(per_raw, as_float=True),
+                        "roe": None,
+                    })
+                result["financials"] = us_fin
+        except Exception as e:
+            logger.warning("[NAVER-US] finance/annual 조회 실패 (%s): %s", reuters_code, e)
 
     # FDR로 미국 주가 기반 기술지표 & (네이버 미지원 시세/지수일 경우) 종가 보완
     fdr_symbol = code.split(".")[0]
@@ -670,6 +734,9 @@ def collect_stock_data(code):
         },
         "etf_info": None,
         "overview": None,
+        "company_profile": None,
+        "consensus": None,
+        "us_highlights": None,
         "investor_trend": [],
         "peers": [],
         "market_context": {},

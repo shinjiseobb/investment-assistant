@@ -380,10 +380,49 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     if (ev.overview) {
+      const profileStrip = document.getElementById("tab1-profile-strip");
+      const prof = ev.company_profile;
+      if (prof && profileStrip) {
+        const pItems = [];
+        if (prof.ceo) pItems.push(`CEO ${prof.ceo}`);
+        if (prof.employees) pItems.push(`임직원 ${Number(prof.employees).toLocaleString("ko-KR")}명`);
+        if (prof.city) pItems.push(`본사 ${prof.city}`);
+        profileStrip.innerHTML = pItems.map((t) => `<span class="ind-badge">${escapeHtml(t)}</span>`).join("");
+      } else if (profileStrip) {
+        profileStrip.innerHTML = "";
+      }
       document.getElementById("tab1-overview-text").textContent = ev.overview;
       overviewBox.classList.remove("hidden");
     } else {
       overviewBox.classList.add("hidden");
+    }
+
+    // 미국 주식용: 월가 컨센서스 & 52주 최고/최저/배당
+    const consensusBox = document.getElementById("tab1-consensus-box");
+    const consensusStrip = document.getElementById("tab1-consensus-strip");
+    if (consensusBox && consensusStrip) {
+      const cItems = [];
+      const cons = ev.consensus;
+      const uh = ev.us_highlights;
+      if (cons && cons.target_mean != null) {
+        cItems.push(`평균 목표가 ${formatPrice(cons.target_mean, "USD")} (최고 ${formatPrice(cons.target_high, "USD")} / 최저 ${formatPrice(cons.target_low, "USD")})`);
+        if (cons.recomm_mean != null) cItems.push(`투자의견 ${cons.recomm_mean} / 5.0`);
+      }
+      if (uh) {
+        if (uh.high_52w != null && uh.low_52w != null) {
+          cItems.push(`52주 최고 ${formatPrice(uh.high_52w, "USD")} / 최저 ${formatPrice(uh.low_52w, "USD")}`);
+        }
+        if (uh.dividend_yield != null) {
+          cItems.push(`배당수익률 ${uh.dividend_yield}%${uh.dividend != null ? ` ($${uh.dividend})` : ""}`);
+        }
+      }
+      if (cItems.length > 0) {
+        consensusStrip.innerHTML = cItems.map((t) => `<span class="ind-badge">${escapeHtml(t)}</span>`).join("");
+        consensusBox.classList.remove("hidden");
+      } else {
+        consensusStrip.innerHTML = "";
+        consensusBox.classList.add("hidden");
+      }
     }
 
     // 기술지표 핵심 요약 (RSI, 볼린저 위치 %, 20일선 이격)
@@ -421,8 +460,12 @@ document.addEventListener("DOMContentLoaded", () => {
       peersList.innerHTML = "";
     }
 
-    // 연간 실적 테이블 (일반 주식)
+    // 연간 실적 테이블 (한국/미국 공용)
     const tbody = document.getElementById("tab1-finance-tbody");
+    const finHeaderLast = document.querySelector("#tab1-financials-box th:last-child");
+    if (finHeaderLast) {
+      finHeaderLast.textContent = currency === "USD" ? "PER (배)" : "ROE (%)";
+    }
     tbody.innerHTML = "";
     const financials = ev.financials || [];
     if (financials.length === 0) {
@@ -451,16 +494,21 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         tdType.appendChild(badge);
 
+        const fmtAmount = currency === "USD" ? formatUsdCurrency : formatKoreanCurrency;
         const tdRev = document.createElement("td");
-        tdRev.textContent = formatKoreanCurrency(row.revenue);
+        tdRev.textContent = fmtAmount(row.revenue);
 
         const tdOp = document.createElement("td");
-        tdOp.textContent = formatKoreanCurrency(row.operating_income);
+        tdOp.textContent = fmtAmount(row.operating_income);
 
-        const tdRoe = document.createElement("td");
-        tdRoe.textContent = row.roe != null ? `${row.roe}%` : "-";
+        const tdLast = document.createElement("td");
+        if (currency === "USD") {
+          tdLast.textContent = row.per != null ? `${row.per}배` : "-";
+        } else {
+          tdLast.textContent = row.roe != null ? `${row.roe}%` : "-";
+        }
 
-        tr.append(tdPeriod, tdType, tdRev, tdOp, tdRoe);
+        tr.append(tdPeriod, tdType, tdRev, tdOp, tdLast);
         tbody.appendChild(tr);
       });
     }
@@ -964,6 +1012,23 @@ document.addEventListener("DOMContentLoaded", () => {
       return `$${Number(val).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     }
     return `${Number(val).toLocaleString("ko-KR")}원`;
+  }
+
+  function formatUsdCurrency(amount) {
+    if (amount === null || amount === undefined) return "-";
+    const isNeg = amount < 0;
+    const absVal = Math.abs(amount);
+    let str = "";
+    if (absVal >= 1_000_000_000_000) {
+      str = `$${(absVal / 1_000_000_000_000).toFixed(2)}T`;
+    } else if (absVal >= 1_000_000_000) {
+      str = `$${(absVal / 1_000_000_000).toFixed(2)}B`;
+    } else if (absVal >= 1_000_000) {
+      str = `$${(absVal / 1_000_000).toFixed(1)}M`;
+    } else {
+      str = `$${absVal.toLocaleString("en-US")}`;
+    }
+    return isNeg ? `-${str}` : str;
   }
 
   async function safeParseJson(resp) {
