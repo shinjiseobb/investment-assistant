@@ -39,7 +39,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const tab1ChatForm = document.getElementById("tab1-chat-form");
   const tab1QuestionInput = document.getElementById("tab1-question");
   const tab1ChatBtn = document.getElementById("tab1-chat-btn");
-  const modeBtns = document.querySelectorAll(".mode-btn");
 
   let tab1CurrentCode = "";
   let tab1ConversationId = "";
@@ -47,17 +46,11 @@ document.addEventListener("DOMContentLoaded", () => {
   let tab1CurrentMode = tab1ModeSelect ? tab1ModeSelect.value : "expert";
   let tab1Reports = { expert: null, beginner: null };
 
-  function syncModeUI(mode) {
-    tab1CurrentMode = mode;
-    if (tab1ModeSelect) tab1ModeSelect.value = mode;
-    modeBtns.forEach((b) => b.classList.toggle("active", b.getAttribute("data-mode") === mode));
-  }
-
-  // 상단 조회 폼 옆 셀렉트 박스 변경 시 동기화
+  // 상단 조회 폼 옆 셀렉트 박스 변경 시 즉시 리포트 전환/생성
   if (tab1ModeSelect) {
     tab1ModeSelect.addEventListener("change", async () => {
       const targetMode = tab1ModeSelect.value;
-      syncModeUI(targetMode);
+      tab1CurrentMode = targetMode;
       if (tab1Reports[targetMode]) {
         renderReportMarkdown(tab1Reports[targetMode]);
       } else if (tab1EvidenceData) {
@@ -65,25 +58,6 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
   }
-
-  // 전문가용 / 초보자용 토글 버튼 이벤트
-  modeBtns.forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const targetMode = btn.getAttribute("data-mode");
-      if (targetMode === tab1CurrentMode) return;
-
-      syncModeUI(targetMode);
-
-      if (tab1Reports[targetMode]) {
-        renderReportMarkdown(tab1Reports[targetMode]);
-        return;
-      }
-
-      if (tab1EvidenceData) {
-        await fetchAndRenderReport(tab1CurrentCode, targetMode, tab1EvidenceData);
-      }
-    });
-  });
 
   // 빠른 선택 예시 버튼
   document.querySelectorAll(".tab1-quick-btn").forEach((btn) => {
@@ -108,7 +82,7 @@ document.addEventListener("DOMContentLoaded", () => {
     tab1EvidenceData = null;
     tab1CurrentCode = code;
     tab1Reports = { expert: null, beginner: null };
-    if (tab1ModeSelect) syncModeUI(tab1ModeSelect.value);
+    if (tab1ModeSelect) tab1CurrentMode = tab1ModeSelect.value;
 
     tab1Error.classList.add("hidden");
     tab1Error.textContent = "";
