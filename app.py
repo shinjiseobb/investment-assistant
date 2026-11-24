@@ -95,6 +95,24 @@ EXPERT_ANALYSIS_PROMPT = """당신은 여의도 수석 애널리스트입니다.
 3. **최신 뉴스 및 DART 주요 전자공시 모멘텀** (수집된 뉴스 및 최근 3개월 DART 공시 기반 주요 이슈 요약)
 4. **종합 의견 및 유의할 리스크 요인**"""
 
+BEGINNER_ANALYSIS_PROMPT = """당신은 주식을 처음 시작하는 초보자에게 쉽고 친절하게 설명해 주는 투자 멘토입니다.
+제공된 [분석 근거 데이터](시장 환경, 시세, 연간실적, DART 확정 분기실적, 수급, 기술지표, 뉴스, 공시)의 실제 숫자만을 근거로 사용하여, 전문성과 신뢰성은 지키면서도 **초보자가 30초 만에 이해할 수 있는 해설 리포트**를 마크다운 형식으로 작성해 주세요.
+(없는 숫자를 절대 지어내지 말고, 추정치는 반드시 '예상치(추정)'라고 표기하세요.)
+
+반드시 아래 4가지 원칙과 구성으로 작성하세요:
+1. **이 종목, 지금 비싼가요 싼가요? (일상 비유 + 실제 숫자)**
+   - PER은 "회사가 1년에 버는 돈의 몇 년 치 가격인지(예: 보통 10배 적정)"로, ETF라면 NAV 대비 괴리율과 펀드보수(수수료)가 저렴한지 쉽게 풀어 설명하세요.
+   - 오늘 코스피·코스닥 시장 분위기 및 경쟁사 대비 잘 버텼는지 비교해 주세요.
+2. **장사는 잘 되고 있나요? (DART 확정 실적 진도율 & 체력)**
+   - 올해 예상 목표(연간 추정치) 중 DART 최신 분기보고서까지 실제로 얼마를 벌었는지(달성 진도율 %)와 자산/부채가 튼튼한지 쉽게 설명하세요.
+3. **지금 분위기와 큰손들의 움직임 (할인율 + 수급 + 주요 이슈)**
+   - 기술지표(`20일선 이격도`, `RSI`, `볼린저밴드 위치 %`)를 "최근 한 달 평균 가격 대비 몇 % 할인/할증된 자리인지, 과열인지"로 번역하세요.
+   - 외국인·기관(큰손)의 최근 5일 매수/매도 방향(억원), 최신 뉴스와 DART 공시(자사주 소각·배당 등) 핵심을 쉽게 요약하세요.
+4. **초보자를 위한 딱 3줄 결론**
+   - 🟢 **좋은 점 1가지**
+   - 🟡 **조심할 점 1가지**
+   - 💡 **지금 한 줄 전략**"""
+
 
 @app.route("/api/chat/analyze", methods=["POST"])
 def chat_analyze():
@@ -104,9 +122,10 @@ def chat_analyze():
     question = str(payload.get("question", "")).strip()
     conversation_id = str(payload.get("conversation_id", "")).strip()
     is_initial = bool(payload.get("is_initial", False))
+    mode = str(payload.get("mode", "expert")).strip().lower()
     cached_evidence = payload.get("evidence")
 
-    logger.info("[REQUEST] POST /api/chat/analyze code=%s initial=%s has_cache=%s", code, is_initial, bool(cached_evidence))
+    logger.info("[REQUEST] POST /api/chat/analyze code=%s initial=%s mode=%s has_cache=%s", code, is_initial, mode, bool(cached_evidence))
 
     # 캐시된 근거가 없으면 collector.py로 새로 수집 (프론트 2단계 호출 시 재크롤링 방지)
     if not cached_evidence or not cached_evidence.get("name"):
@@ -142,7 +161,7 @@ def chat_analyze():
     context_text = json.dumps(context_summary, ensure_ascii=False, indent=2)
 
     if is_initial and not question:
-        final_question = EXPERT_ANALYSIS_PROMPT
+        final_question = BEGINNER_ANALYSIS_PROMPT if mode == "beginner" else EXPERT_ANALYSIS_PROMPT
     else:
         user_q = question or "이 종목의 투자 지표, 실적 추이, 최신 뉴스를 근거로 분석해 주세요."
         final_question = (

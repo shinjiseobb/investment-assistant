@@ -33,14 +33,38 @@ document.addEventListener("DOMContentLoaded", () => {
   const tab1Loading = document.getElementById("tab1-loading");
   const tab1EvidencePanel = document.getElementById("tab1-evidence-panel");
   const tab1ChatSection = document.getElementById("tab1-chat-section");
+  const tab1ReportBox = document.getElementById("tab1-report-box");
   const tab1ChatLog = document.getElementById("tab1-chat-log");
   const tab1ChatForm = document.getElementById("tab1-chat-form");
   const tab1QuestionInput = document.getElementById("tab1-question");
   const tab1ChatBtn = document.getElementById("tab1-chat-btn");
+  const modeBtns = document.querySelectorAll(".mode-btn");
 
   let tab1CurrentCode = "";
   let tab1ConversationId = "";
   let tab1EvidenceData = null;
+  let tab1CurrentMode = "expert";
+  let tab1Reports = { expert: null, beginner: null };
+
+  // 전문가용 / 초보자용 토글 버튼 이벤트
+  modeBtns.forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const targetMode = btn.getAttribute("data-mode");
+      if (targetMode === tab1CurrentMode) return;
+
+      tab1CurrentMode = targetMode;
+      modeBtns.forEach((b) => b.classList.toggle("active", b.getAttribute("data-mode") === targetMode));
+
+      if (tab1Reports[targetMode]) {
+        renderReportMarkdown(tab1Reports[targetMode]);
+        return;
+      }
+
+      if (tab1EvidenceData) {
+        await fetchAndRenderReport(tab1CurrentCode, targetMode, tab1EvidenceData);
+      }
+    });
+  });
 
   // 빠른 선택 예시 버튼
   document.querySelectorAll(".tab1-quick-btn").forEach((btn) => {
@@ -64,17 +88,19 @@ document.addEventListener("DOMContentLoaded", () => {
     tab1ConversationId = "";
     tab1EvidenceData = null;
     tab1CurrentCode = code;
+    tab1Reports = { expert: null, beginner: null };
 
     tab1Error.classList.add("hidden");
     tab1Error.textContent = "";
     tab1EvidencePanel.classList.add("hidden");
     tab1ChatSection.classList.add("hidden");
+    tab1ReportBox.innerHTML = "";
     tab1ChatLog.innerHTML = "";
     tab1Loading.classList.remove("hidden");
     tab1LoadBtn.disabled = true;
 
     try {
-      // 1단계: /fetch 로 네이버·FDR·Serper 근거 데이터 먼저 수집 (Vercel 10초 타임아웃 방어)
+      // 1단계: /fetch 로 네이버·DART·FDR·Serper 근거 데이터 먼저 수집 (Vercel 10초 타임아웃 방어)
       const fetchResp = await fetch("/fetch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -96,28 +122,39 @@ document.addEventListener("DOMContentLoaded", () => {
       tab1ChatSection.classList.remove("hidden");
       tab1Loading.classList.add("hidden");
 
-      // 2단계: 수집된 근거를 넘겨 Dify 애널리스트 리포트 생성
-      const loadingBubble = appendChatMessage(tab1ChatLog, "수집된 데이터를 바탕으로 AI 수석 애널리스트 리포트를 작성 중입니다...", "bot");
+      // 2단계: 현재 선택된 모드(전문가용 / 초보자용)로 리포트 생성
+      await fetchAndRenderReport(code, tab1CurrentMode, evData);
+    } catch (err) {
+      console.error("[ERROR] 탭1 통신 오류:", err.message);
+      tab1Error.textContent = "⚠️ 서버와 통신하는 중 오류가 발생했습니다.";
+      tab1Error.classList.remove("hidden");
+    } finally {
+      tab1Loading.classList.add("hidden");
+      tab1LoadBtn.disabled = false;
+    }
+  }
 
+  async function fetchAndRenderReport(code, mode, evData) {
+    const modeLabel = mode === "beginner" ? "초보자용 쉬운 해설" : "전문가용 상세 리포트";
+    tab1ReportBox.innerHTML = `<p style="color:#6b7280;">수집된 데이터를 바탕으로 <strong>${modeLabel}</strong>를 작성 중입니다...</p>`;
+
+    try {
       const analyzeResp = await fetch("/api/chat/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           code,
+          mode,
           is_initial: true,
           evidence: evData,
         }),
       });
 
       const data = await safeParseJson(analyzeResp);
-      loadingBubble.remove();
-
       if (!data) {
         const fallbackErr = `AI 서버 응답을 해석할 수 없습니다 (상태 코드: ${analyzeResp.status}).`;
         console.error("[ERROR] 탭1 AI 분석 오류:", fallbackErr);
-        tab1Error.textContent = `⚠️ ${fallbackErr}`;
-        tab1Error.classList.remove("hidden");
-        appendChatMessage(tab1ChatLog, `안내: ${fallbackErr}`, "bot");
+        tab1ReportBox.innerHTML = `<p style="color:#b91c1c;">⚠️ ${escapeHtml(fallbackErr)}</p>`;
         return;
       }
 
@@ -126,23 +163,29 @@ document.addEventListener("DOMContentLoaded", () => {
         tab1Error.textContent = `⚠️ ${data.error}`;
         tab1Error.classList.remove("hidden");
         if (!data.answer) {
-          appendChatMessage(tab1ChatLog, `안내: ${data.error}`, "bot");
+          tab1ReportBox.innerHTML = `<p style="color:#b91c1c;">안내: ${escapeHtml(data.error)}</p>`;
           return;
         }
       }
 
-      if (data.conversation_id) {
+      if (data.conversation_id && !tab1ConversationId) {
         tab1ConversationId = data.conversation_id;
       }
 
-      appendChatMessage(tab1ChatLog, data.answer || "응답을 받지 못했습니다.", "bot");
+      const answerText = data.answer || "응답을 받지 못했습니다.";
+      tab1Reports[mode] = answerText;
+      renderReportMarkdown(answerText);
     } catch (err) {
-      console.error("[ERROR] 탭1 통신 오류:", err.message);
-      tab1Error.textContent = "⚠️ 서버와 통신하는 중 오류가 발생했습니다.";
-      tab1Error.classList.remove("hidden");
-    } finally {
-      tab1Loading.classList.add("hidden");
-      tab1LoadBtn.disabled = false;
+      console.error("[ERROR] 탭1 리포트 통신 오류:", err.message);
+      tab1ReportBox.innerHTML = `<p style="color:#b91c1c;">⚠️ 리포트를 불러오는 중 오류가 발생했습니다.</p>`;
+    }
+  }
+
+  function renderReportMarkdown(text) {
+    if (window.marked && window.DOMPurify) {
+      tab1ReportBox.innerHTML = DOMPurify.sanitize(marked.parse(String(text || "")));
+    } else {
+      tab1ReportBox.textContent = text;
     }
   }
 

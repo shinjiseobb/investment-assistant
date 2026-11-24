@@ -636,3 +636,92 @@ body {
   color: #4b5563;
   border: 1px solid #e5e7eb;
 }
+
+/* ==================== 전문가용 / 초보자용 세그먼트 토글 & 리포트 박스 ==================== */
+.report-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.report-header h3 {
+  margin-bottom: 0;
+}
+
+.mode-toggle-group {
+  display: inline-flex;
+  background-color: #e5e7eb;
+  padding: 4px;
+  border-radius: 10px;
+  gap: 4px;
+}
+
+.mode-btn {
+  padding: 7px 14px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #4b5563;
+  background-color: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.mode-btn:hover {
+  color: #111827;
+}
+
+.mode-btn.active {
+  background-color: #2563eb;
+  color: #ffffff;
+  box-shadow: 0 1px 4px rgba(37, 99, 235, 0.25);
+}
+
+.report-box {
+  background-color: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 18px;
+  max-height: 520px;
+  overflow-y: auto;
+  line-height: 1.7;
+  font-size: 0.94rem;
+}
+
+.report-box h1,
+.report-box h2,
+.report-box h3,
+.report-box h4 {
+  margin-top: 14px;
+  margin-bottom: 6px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.report-box h3 {
+  font-size: 1.03rem;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 4px;
+}
+
+.report-box p {
+  margin-bottom: 8px;
+}
+
+.report-box ul,
+.report-box ol {
+  margin-left: 20px;
+  margin-bottom: 8px;
+}
+
+.report-box li {
+  margin-bottom: 4px;
+}
+
+.report-box strong {
+  color: #1e40af;
+}
