@@ -309,7 +309,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const sign = mc[k].change_rate > 0 ? "+" : "";
         const color = mc[k].change_rate > 0 ? "#dc2626" : mc[k].change_rate < 0 ? "#2563eb" : "#374151";
         mcItems.push(
-          `<span class="ind-badge">🌐 ${escapeHtml(mc[k].label)}: ${mc[k].value.toLocaleString("ko-KR")} <span style="color:${color}">(${sign}${mc[k].change_rate}%)</span></span>`
+          `<span class="ind-badge">${escapeHtml(mc[k].label)} ${mc[k].value.toLocaleString("ko-KR")} <span style="color:${color}">(${sign}${mc[k].change_rate}%)</span></span>`
         );
       }
     });
@@ -392,9 +392,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (ts) {
       const gapSign = ts.ma20_gap_pct > 0 ? "+" : "";
       const tsItems = [
-        `📊 RSI(14): ${ts.rsi14 ?? "-"}`,
-        `📈 볼린저밴드 위치: ${ts.bb_position_pct != null ? ts.bb_position_pct + "% (0%=하단, 100%=상단)" : "-"}`,
-        `📏 20일선 이격도: ${ts.ma20_gap_pct != null ? gapSign + ts.ma20_gap_pct + "%" : "-"}`,
+        `RSI(14) ${ts.rsi14 ?? "-"}`,
+        `볼린저밴드 위치 ${ts.bb_position_pct != null ? ts.bb_position_pct + "%" : "-"}`,
+        `20일선 이격도 ${ts.ma20_gap_pct != null ? gapSign + ts.ma20_gap_pct + "%" : "-"}`,
       ];
       techSummaryEl.innerHTML = tsItems.map((t) => `<span class="ind-badge">${escapeHtml(t)}</span>`).join("");
     } else {
@@ -471,7 +471,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const dartFinBadges = document.getElementById("tab1-dart-fin-badges");
     const df = ev.dart_latest_financials;
     if (ev.asset_type !== "etf" && df) {
-      dartFinTitle.textContent = `🏛️ DART 최신 확정 실적 및 재무상태 (${df.period_label || "-"})`;
+      dartFinTitle.textContent = `최근 확정 실적 및 재무상태 (${df.period_label || "-"})`;
       const dfItems = [
         `당기 매출: ${formatKoreanCurrency(df.revenue_q)}`,
         `누적 매출: ${formatKoreanCurrency(df.revenue_cum)}`,
@@ -925,8 +925,8 @@ document.addEventListener("DOMContentLoaded", () => {
           items.forEach((it) => {
             const li = document.createElement("li");
             li.className = "autocomplete-item";
-            const flag = it.nation === "USA" ? "🇺🇸" : "🇰🇷";
-            li.innerHTML = `<span class="ac-name">${flag} ${escapeHtml(it.name)}</span><span class="ac-meta">${escapeHtml(it.code)} · ${escapeHtml(it.exchange || it.nation)}</span>`;
+            const nationTag = it.nation === "USA" ? "US" : "KR";
+            li.innerHTML = `<span class="ac-name">${escapeHtml(it.name)}</span><span class="ac-meta">${nationTag} · ${escapeHtml(it.code)} · ${escapeHtml(it.exchange || "")}</span>`;
             li.addEventListener("mousedown", (e) => {
               e.preventDefault();
               inputEl.value = it.code;
