@@ -39,7 +39,7 @@ def _is_key_configured(env_name, placeholder):
 
 @app.route("/health", methods=["GET"])
 def health():
-    """서버 상태 및 3종 API Key 설정 여부만 boolean으로 반환 (키 값 자체는 절대 노출 금지)"""
+    """서버 상태 및 4종 API Key 설정 여부만 boolean으로 반환 (키 값 자체는 절대 노출 금지)"""
     has_serper_key = _is_key_configured("SERPER_API_KEY", "your_serper_api_key_here")
     has_dify_analysis_key = _is_key_configured(
         "DIFY_ANALYSIS_API_KEY", "your_dify_analysis_chatbot_api_key_here"
@@ -47,18 +47,21 @@ def health():
     has_dify_tech_key = _is_key_configured(
         "DIFY_TECH_API_KEY", "your_dify_tech_chatbot_api_key_here"
     )
+    has_dart_key = _is_key_configured("DART_API_KEY", "your_opendart_api_key_here")
 
     logger.info(
-        "[REQUEST] GET /health (serper=%s, dify_analysis=%s, dify_tech=%s)",
+        "[REQUEST] GET /health (serper=%s, dify_analysis=%s, dify_tech=%s, dart=%s)",
         has_serper_key,
         has_dify_analysis_key,
         has_dify_tech_key,
+        has_dart_key,
     )
     return jsonify({
         "status": "ok",
         "has_serper_key": has_serper_key,
         "has_dify_analysis_key": has_dify_analysis_key,
         "has_dify_tech_key": has_dify_tech_key,
+        "has_dart_key": has_dart_key,
     }), 200
 
 
@@ -88,7 +91,7 @@ EXPERT_ANALYSIS_PROMPT = """당신은 여의도 수석 애널리스트입니다.
    - 일반 주식은 매출액·영업이익·ROE 추이(추정치 포함), ETF는 1·3·6·12개월 기간별 수익률 흐름을 설명하세요.
    - 최근 5거래일 외국인·기관·개인 순매수 금액(`억원` 단위 포함) 동향을 짚어주세요.
    - 기술지표 요약(`tech_summary`: RSI14, 볼린저밴드 내 위치 %, 20일선 이격도)으로 현재 주가가 단기 과열/바닥 구간인지 함께 해석하세요.
-3. **최신 뉴스 및 핵심 모멘텀** (수집된 뉴스 기반 주요 이슈 요약)
+3. **최신 뉴스 및 DART 주요 전자공시 모멘텀** (수집된 뉴스 및 최근 3개월 DART 공시 기반 주요 이슈 요약)
 4. **종합 의견 및 유의할 리스크 요인**"""
 
 
@@ -131,6 +134,7 @@ def chat_analyze():
         "etf_info": evidence.get("etf_info"),
         "investor_trend": evidence.get("investor_trend", []),
         "financials": evidence["financials"],
+        "disclosures": evidence.get("disclosures", []),
         "news": evidence["news"],
     }
     context_text = json.dumps(context_summary, ensure_ascii=False, indent=2)

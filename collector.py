@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import requests
 import FinanceDataReader as fdr
 from dotenv import load_dotenv
+from dart_client import fetch_dart_disclosures
 
 load_dotenv()
 
@@ -436,6 +437,7 @@ def collect_stock_data(code):
         "market_context": {},
         "tech_summary": None,
         "financials": [],
+        "disclosures": [],
         "news": [],
         "errors": [],
     }
@@ -473,13 +475,19 @@ def collect_stock_data(code):
     result["market_context"] = fetch_market_context()
     result["tech_summary"] = build_tech_summary(valid_code)
 
-    # ETF는 기업 재무제표(매출액/영업이익)가 없으므로 일반 주식일 때만 조회
+    # ETF는 기업 재무제표 및 DART 기업 공시가 없으므로 일반 주식일 때만 조회
     if asset_type != "etf":
         financials, err = fetch_financials(valid_code)
         if err:
             result["errors"].append(err)
         else:
             result["financials"] = financials
+
+        disclosures, err = fetch_dart_disclosures(valid_code)
+        if err:
+            result["errors"].append(err)
+        else:
+            result["disclosures"] = disclosures
 
     # 네이버에서 파싱한 정식 종목명으로 Serper News API 호출
     if result["name"]:
@@ -490,10 +498,11 @@ def collect_stock_data(code):
             result["news"] = news_list
 
     logger.info(
-        "[RESPONSE] 수집 완료 (code=%s, type=%s, financials=%d, trend=%d, news=%d, errors=%d)",
+        "[RESPONSE] 수집 완료 (code=%s, type=%s, financials=%d, disclosures=%d, trend=%d, news=%d, errors=%d)",
         result["code"],
         result["asset_type"],
         len(result["financials"]),
+        len(result["disclosures"]),
         len(result["investor_trend"]),
         len(result["news"]),
         len(result["errors"]),

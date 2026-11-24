@@ -381,6 +381,44 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
 
+    // 주식용: 최근 3개월 OpenDART 주요 전자공시
+    const dartBox = document.getElementById("tab1-dart-box");
+    const dartTbody = document.getElementById("tab1-dart-tbody");
+    dartTbody.innerHTML = "";
+    const disclosures = ev.disclosures || [];
+    if (ev.asset_type !== "etf" && disclosures.length > 0) {
+      disclosures.forEach((d) => {
+        const tr = document.createElement("tr");
+
+        const tdDate = document.createElement("td");
+        tdDate.textContent = d.date || "-";
+
+        const tdCat = document.createElement("td");
+        const badge = document.createElement("span");
+        badge.className = `badge-dart badge-dart-${d.badge_type || "default"}`;
+        badge.textContent = d.category || "공시";
+        tdCat.appendChild(badge);
+
+        const tdTitle = document.createElement("td");
+        tdTitle.style.textAlign = "left";
+        const a = document.createElement("a");
+        a.href = d.url || "#";
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.style.color = "#1d4ed8";
+        a.style.textDecoration = "none";
+        a.style.fontWeight = "500";
+        a.textContent = `${d.title || "공시 원문"} ↗`;
+        tdTitle.appendChild(a);
+
+        tr.append(tdDate, tdCat, tdTitle);
+        dartTbody.appendChild(tr);
+      });
+      dartBox.classList.remove("hidden");
+    } else {
+      dartBox.classList.add("hidden");
+    }
+
     // 뉴스 카드 리스트
     const newsListEl = document.getElementById("tab1-news-list");
     newsListEl.innerHTML = "";

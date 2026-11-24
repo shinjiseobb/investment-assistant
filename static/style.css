@@ -603,3 +603,36 @@ body {
 .chat-msg.bot.markdown-body th {
   background-color: #f3f4f6;
 }
+
+/* ==================== OpenDART 전자공시 신호등 배지 ==================== */
+.badge-dart {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border-radius: 6px;
+}
+
+.badge-dart-info {
+  background-color: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.badge-dart-positive {
+  background-color: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.badge-dart-warning {
+  background-color: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.badge-dart-default {
+  background-color: #f3f4f6;
+  color: #4b5563;
+  border: 1px solid #e5e7eb;
+}
