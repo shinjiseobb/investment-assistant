@@ -1,12 +1,57 @@
 document.addEventListener("DOMContentLoaded", () => {
   console.log("[PAGE] 메인 3탭 페이지 로드 완료");
 
+  // ==================== 0. 전역 작업 잠금 & 범용 진행 바 ====================
+  let isAppBusy = false;
+  const globalProgressBox = document.getElementById("global-progress-box");
+  const progressText = document.getElementById("progress-text");
+  const progressPercent = document.getElementById("progress-percent");
+  const progressFill = document.getElementById("progress-fill");
+
+  function setAppBusy(busy) {
+    isAppBusy = busy;
+    const selectors = [
+      ".tab-btn",
+      "#tab1-load-btn",
+      "#tab1-mode-select",
+      ".tab1-quick-btn",
+      "#tab1-chat-btn",
+      "#tab2-submit",
+      "#tab3-load-btn",
+      "#tab3-chat-btn",
+    ];
+    selectors.forEach((sel) => {
+      document.querySelectorAll(sel).forEach((el) => {
+        el.disabled = busy;
+      });
+    });
+  }
+
+  function showProgress(percent, text) {
+    if (!globalProgressBox) return;
+    progressText.textContent = text;
+    progressPercent.textContent = `${percent}%`;
+    progressFill.style.width = `${percent}%`;
+    globalProgressBox.classList.remove("hidden");
+  }
+
+  function hideProgress() {
+    if (!globalProgressBox) return;
+    setTimeout(() => {
+      if (!isAppBusy) {
+        globalProgressBox.classList.add("hidden");
+        progressFill.style.width = "0%";
+      }
+    }, 450);
+  }
+
   // ==================== 1. 탭 전환 로직 ====================
   const tabBtns = document.querySelectorAll(".tab-btn");
   const tabPanels = document.querySelectorAll(".tab-panel");
 
   tabBtns.forEach((btn) => {
     btn.addEventListener("click", () => {
+      if (isAppBusy) return;
       const targetTab = btn.getAttribute("data-tab");
       console.log(`[TAB] 탭 전환 (tab=${targetTab})`);
 
@@ -49,12 +94,21 @@ document.addEventListener("DOMContentLoaded", () => {
   // 상단 조회 폼 옆 셀렉트 박스 변경 시 즉시 리포트 전환/생성
   if (tab1ModeSelect) {
     tab1ModeSelect.addEventListener("change", async () => {
+      if (isAppBusy) return;
       const targetMode = tab1ModeSelect.value;
       tab1CurrentMode = targetMode;
       if (tab1Reports[targetMode]) {
         renderReportMarkdown(tab1Reports[targetMode]);
       } else if (tab1EvidenceData) {
-        await fetchAndRenderReport(tab1CurrentCode, targetMode, tab1EvidenceData);
+        setAppBusy(true);
+        showProgress(65, "선택하신 모드로 AI 리포트를 생성하고 있습니다...");
+        try {
+          await fetchAndRenderReport(tab1CurrentCode, targetMode, tab1EvidenceData);
+          showProgress(100, "리포트 전환 완료!");
+        } finally {
+          setAppBusy(false);
+          hideProgress();
+        }
       }
     });
   }
@@ -62,6 +116,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // 빠른 선택 예시 버튼
   document.querySelectorAll(".tab1-quick-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
+      if (isAppBusy) return;
       const code = btn.getAttribute("data-code");
       tab1CodeInput.value = code;
       runInitialAnalysis(code);
@@ -71,11 +126,13 @@ document.addEventListener("DOMContentLoaded", () => {
   // 1단계: 종목 조회 & 자동 전문가 분석 시작
   tab1LoadForm.addEventListener("submit", (e) => {
     e.preventDefault();
+    if (isAppBusy) return;
     const code = tab1CodeInput.value.trim();
     if (code) runInitialAnalysis(code);
   });
 
   async function runInitialAnalysis(code) {
+    if (isAppBusy) return;
     console.log(`[ANALYZE] 탭1 심층분석 요청 시작 (code=${code})`);
 
     tab1ConversationId = "";
@@ -90,8 +147,10 @@ document.addEventListener("DOMContentLoaded", () => {
     tab1ChatSection.classList.add("hidden");
     tab1ReportBox.innerHTML = "";
     tab1ChatLog.innerHTML = "";
-    tab1Loading.classList.remove("hidden");
-    tab1LoadBtn.disabled = true;
+    tab1Loading.classList.add("hidden");
+
+    setAppBusy(true);
+    showProgress(30, "1/2 단계: 시세 · 공시 · 뉴스 · 기술지표 데이터를 수집 중입니다...");
 
     try {
       // 1단계: /fetch 로 네이버·DART·FDR·Serper 근거 데이터 먼저 수집 (Vercel 10초 타임아웃 방어)
@@ -114,17 +173,18 @@ document.addEventListener("DOMContentLoaded", () => {
       renderTab1Evidence(evData);
       tab1EvidencePanel.classList.remove("hidden");
       tab1ChatSection.classList.remove("hidden");
-      tab1Loading.classList.add("hidden");
 
       // 2단계: 현재 선택된 모드(전문가용 / 초보자용)로 리포트 생성
+      showProgress(70, "2/2 단계: 수집 완료! AI가 심층 분석 리포트를 작성 중입니다...");
       await fetchAndRenderReport(code, tab1CurrentMode, evData);
+      showProgress(100, "분석이 완료되었습니다!");
     } catch (err) {
       console.error("[ERROR] 탭1 통신 오류:", err.message);
       tab1Error.textContent = "⚠️ 서버와 통신하는 중 오류가 발생했습니다.";
       tab1Error.classList.remove("hidden");
     } finally {
-      tab1Loading.classList.add("hidden");
-      tab1LoadBtn.disabled = false;
+      setAppBusy(false);
+      hideProgress();
     }
   }
 
@@ -186,12 +246,14 @@ document.addEventListener("DOMContentLoaded", () => {
   // 2단계: 수집된 근거를 유지한 채 후속 채팅 이어가기
   tab1ChatForm.addEventListener("submit", async (e) => {
     e.preventDefault();
+    if (isAppBusy) return;
     const question = tab1QuestionInput.value.trim();
     if (!question || !tab1CurrentCode) return;
 
     appendChatMessage(tab1ChatLog, question, "user");
     tab1QuestionInput.value = "";
-    tab1ChatBtn.disabled = true;
+    setAppBusy(true);
+    showProgress(55, "수집된 근거를 바탕으로 AI가 답변을 작성 중입니다...");
 
     const loadingBubble = appendChatMessage(tab1ChatLog, "수집된 근거와 대화 맥락을 바탕으로 답변 생성 중...", "bot");
 
@@ -208,12 +270,13 @@ document.addEventListener("DOMContentLoaded", () => {
         }),
       });
 
-      const data = await resp.json();
+      const data = await safeParseJson(resp);
       loadingBubble.remove();
 
-      if (data.error) {
-        console.error("[ERROR] 탭1 후속 채팅 오류:", data.error);
-        appendChatMessage(tab1ChatLog, `안내: ${data.error}`, "bot");
+      if (!data || data.error) {
+        const errMsg = (data && data.error) || `응답 오류 (상태 코드: ${resp.status})`;
+        console.error("[ERROR] 탭1 후속 채팅 오류:", errMsg);
+        appendChatMessage(tab1ChatLog, `안내: ${errMsg}`, "bot");
         return;
       }
 
@@ -222,12 +285,14 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       appendChatMessage(tab1ChatLog, data.answer || "응답을 받지 못했습니다.", "bot");
+      showProgress(100, "답변 완료!");
     } catch (err) {
       loadingBubble.remove();
       console.error("[ERROR] 탭1 후속 통신 오류:", err.message);
       appendChatMessage(tab1ChatLog, "⚠️ 서버와 통신하는 중 오류가 발생했습니다.", "bot");
     } finally {
-      tab1ChatBtn.disabled = false;
+      setAppBusy(false);
+      hideProgress();
     }
   });
 
@@ -548,14 +613,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
   tab2Form.addEventListener("submit", async (e) => {
     e.preventDefault();
+    if (isAppBusy) return;
     const codes = tab2CodesInput.value.trim();
     if (!codes) return;
 
     console.log(`[REBALANCE] 탭2 리밸런싱 계산 요청 (codes=${codes})`);
     tab2Error.classList.add("hidden");
     tab2Result.classList.add("hidden");
-    tab2Loading.classList.remove("hidden");
-    tab2SubmitBtn.disabled = true;
+    tab2Loading.classList.add("hidden");
+
+    setAppBusy(true);
+    showProgress(45, "최근 1년 주가 수집 및 3,000회 몬테카를로 시뮬레이션 계산 중...");
 
     try {
       const resp = await fetch("/api/rebalance", {
@@ -564,22 +632,24 @@ document.addEventListener("DOMContentLoaded", () => {
         body: JSON.stringify({ codes }),
       });
 
-      const data = await resp.json();
-      if (!resp.ok || data.error) {
-        console.error("[ERROR] 탭2 계산 오류:", data.error);
-        tab2Error.textContent = `⚠️ ${data.error || "리밸런싱 계산에 실패했습니다."}`;
+      const data = await safeParseJson(resp);
+      if (!resp.ok || !data || data.error) {
+        const errMsg = (data && data.error) || "리밸런싱 계산에 실패했습니다.";
+        console.error("[ERROR] 탭2 계산 오류:", errMsg);
+        tab2Error.textContent = `⚠️ ${errMsg}`;
         tab2Error.classList.remove("hidden");
         return;
       }
 
       renderRebalanceResult(data);
+      showProgress(100, "리밸런싱 계산 완료!");
     } catch (err) {
       console.error("[ERROR] 탭2 통신 오류:", err.message);
       tab2Error.textContent = "⚠️ 서버와 통신하는 중 오류가 발생했습니다.";
       tab2Error.classList.remove("hidden");
     } finally {
-      tab2Loading.classList.add("hidden");
-      tab2SubmitBtn.disabled = false;
+      setAppBusy(false);
+      hideProgress();
     }
   });
 
@@ -671,13 +741,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
   tab3LoadForm.addEventListener("submit", async (e) => {
     e.preventDefault();
+    if (isAppBusy) return;
     const code = tab3CodeInput.value.trim();
     if (!code) return;
 
     tab3Error.classList.add("hidden");
     tab3Content.classList.add("hidden");
-    tab3Loading.classList.remove("hidden");
-    tab3LoadBtn.disabled = true;
+    tab3Loading.classList.add("hidden");
+
+    setAppBusy(true);
+    showProgress(50, "이동평균선 · RSI · MACD · 볼린저밴드 기술지표를 계산 중입니다...");
 
     try {
       const resp = await fetch("/api/indicators", {
@@ -686,10 +759,11 @@ document.addEventListener("DOMContentLoaded", () => {
         body: JSON.stringify({ code }),
       });
 
-      const data = await resp.json();
-      if (!resp.ok || data.error) {
-        console.error("[ERROR] 탭3 지표 계산 오류:", data.error);
-        tab3Error.textContent = `⚠️ ${data.error || "기술지표를 불러오지 못했습니다."}`;
+      const data = await safeParseJson(resp);
+      if (!resp.ok || !data || data.error) {
+        const errMsg = (data && data.error) || "기술지표를 불러오지 못했습니다.";
+        console.error("[ERROR] 탭3 지표 계산 오류:", errMsg);
+        tab3Error.textContent = `⚠️ ${errMsg}`;
         tab3Error.classList.remove("hidden");
         return;
       }
@@ -704,13 +778,14 @@ document.addEventListener("DOMContentLoaded", () => {
       renderTechBadges(data.latest, data.name || code, data.currency || "KRW");
       renderTechCharts(data);
       tab3Content.classList.remove("hidden");
+      showProgress(100, "기술지표 차트 계산 완료!");
     } catch (err) {
       console.error("[ERROR] 탭3 통신 오류:", err.message);
       tab3Error.textContent = "⚠️ 서버와 통신하는 중 오류가 발생했습니다.";
       tab3Error.classList.remove("hidden");
     } finally {
-      tab3Loading.classList.add("hidden");
-      tab3LoadBtn.disabled = false;
+      setAppBusy(false);
+      hideProgress();
     }
   });
 
@@ -775,13 +850,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
   tab3ChatForm.addEventListener("submit", async (e) => {
     e.preventDefault();
+    if (isAppBusy) return;
     const question = tab3QuestionInput.value.trim();
     if (!question || !tab3CurrentCode || !tab3LatestIndicators) return;
 
     console.log("[TECH_CHAT] 탭3 기술지표 숫자 주입 채팅 요청");
     appendChatMessage(tab3ChatLog, question, "user");
     tab3QuestionInput.value = "";
-    tab3ChatBtn.disabled = true;
+    setAppBusy(true);
+    showProgress(60, "지표해석기 AI가 기술지표 숫자를 분석 중입니다...");
 
     const loadingBubble = appendChatMessage(tab3ChatLog, "계산된 지표를 바탕으로 지표해석기 챗봇이 분석 중...", "bot");
 
@@ -797,12 +874,13 @@ document.addEventListener("DOMContentLoaded", () => {
         }),
       });
 
-      const data = await resp.json();
+      const data = await safeParseJson(resp);
       loadingBubble.remove();
 
-      if (data.error) {
-        console.error("[ERROR] 탭3 채팅 오류:", data.error);
-        appendChatMessage(tab3ChatLog, `안내: ${data.error}`, "bot");
+      if (!data || data.error) {
+        const errMsg = (data && data.error) || `응답 오류 (상태 코드: ${resp.status})`;
+        console.error("[ERROR] 탭3 채팅 오류:", errMsg);
+        appendChatMessage(tab3ChatLog, `안내: ${errMsg}`, "bot");
         return;
       }
 
@@ -810,12 +888,14 @@ document.addEventListener("DOMContentLoaded", () => {
         tab3ConversationId = data.conversation_id;
       }
       appendChatMessage(tab3ChatLog, data.answer || "응답을 받지 못했습니다.", "bot");
+      showProgress(100, "지표 해석 완료!");
     } catch (err) {
       loadingBubble.remove();
       console.error("[ERROR] 탭3 채팅 통신 오류:", err.message);
       appendChatMessage(tab3ChatLog, "⚠️ 서버와 통신하는 중 오류가 발생했습니다.", "bot");
     } finally {
-      tab3ChatBtn.disabled = false;
+      setAppBusy(false);
+      hideProgress();
     }
   });
 

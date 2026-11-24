@@ -28,6 +28,17 @@
       <button type="button" class="tab-btn" data-tab="3">3. 기술지표 차트 + 채팅</button>
     </nav>
 
+    <!-- 전역 실시간 작업 진행 상태바 -->
+    <div id="global-progress-box" class="global-progress-box hidden">
+      <div class="progress-header">
+        <span id="progress-text">작업을 준비하고 있습니다...</span>
+        <span id="progress-percent">0%</span>
+      </div>
+      <div class="progress-track">
+        <div id="progress-fill" class="progress-fill" style="width: 0%;"></div>
+      </div>
+    </div>
+
     <!-- ==================== 탭 1: 종목 심층분석 채팅 ==================== -->
     <section id="tab-1" class="tab-panel active">
       <div class="card-section">
