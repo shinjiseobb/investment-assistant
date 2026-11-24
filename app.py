@@ -77,22 +77,24 @@ def fetch():
 
 
 EXPERT_ANALYSIS_PROMPT = """당신은 여의도 수석 애널리스트입니다.
-제공된 [분석 근거 데이터](네이버 금융 시세·투자지표·수급·실적/ETF정보, Serper 최신 뉴스)만을 근거로 사용하여 다음 4가지 항목으로 구조화된 심층 분석 리포트를 마크다운 형식으로 작성해 주세요.
+제공된 [분석 근거 데이터](시장 환경, 동일업종 경쟁사, 기술지표 요약, 시세·투자지표·수급(억원)·실적/ETF정보, Serper 최신 뉴스)만을 근거로 사용하여 다음 4가지 항목으로 구조화된 심층 분석 리포트를 마크다운 형식으로 작성해 주세요.
 (없는 숫자를 지어내지 말고, 추정치(is_consensus=true)는 반드시 '추정치'임을 명시하세요.)
 
-1. **현재 주가 및 밸류에이션 / 상품 진단**
+1. **시장 환경 대비 주가 및 밸류에이션 / 상품 진단**
+   - 먼저 오늘의 시장 환경(`market_context`: 코스피·코스닥·원/달러 환율) 및 동일업종 경쟁사(`peers`) 등락률과 비교해 이 종목의 상대적 강도/방어력을 짚어주세요.
    - 일반 주식(`asset_type=stock`)이면 현재가, 등락률, 시가총액, PER·PBR 수준을 해석하세요.
    - ETF(`asset_type=etf`)이면 현재가, 등락률, 시가총액, NAV, 괴리율, 펀드보수, 분배금 수익률, 기초지수를 해석하세요.
-2. **실적 추이 / ETF 성과 및 투자자별 수급(최근 5일)**
+2. **실적 추이 / ETF 성과 · 수급(억원) · 기술적 위치**
    - 일반 주식은 매출액·영업이익·ROE 추이(추정치 포함), ETF는 1·3·6·12개월 기간별 수익률 흐름을 설명하세요.
-   - 공통적으로 최근 5거래일 외국인·기관·개인 순매수 동향(`investor_trend`)을 반드시 짚어주세요.
+   - 최근 5거래일 외국인·기관·개인 순매수 금액(`억원` 단위 포함) 동향을 짚어주세요.
+   - 기술지표 요약(`tech_summary`: RSI14, 볼린저밴드 내 위치 %, 20일선 이격도)으로 현재 주가가 단기 과열/바닥 구간인지 함께 해석하세요.
 3. **최신 뉴스 및 핵심 모멘텀** (수집된 뉴스 기반 주요 이슈 요약)
 4. **종합 의견 및 유의할 리스크 요인**"""
 
 
 @app.route("/api/chat/analyze", methods=["POST"])
 def chat_analyze():
-    """[탭 1] 초기 조회 시 collector.py 수집 후 전문가 리포트를 생성하고, 후속 질문은 대화 맥락을 이어간다."""
+    """[탭 1] 초기 조회 시 collector.py 수집(또는 캐시된 근거 활용) 후 전문가 리포트를 생성하고, 후속 질문은 대화 맥락을 이어간다."""
     payload = request.get_json(silent=True) or {}
     code = str(payload.get("code", "")).strip()
     question = str(payload.get("question", "")).strip()
@@ -100,10 +102,10 @@ def chat_analyze():
     is_initial = bool(payload.get("is_initial", False))
     cached_evidence = payload.get("evidence")
 
-    logger.info("[REQUEST] POST /api/chat/analyze code=%s initial=%s", code, is_initial)
+    logger.info("[REQUEST] POST /api/chat/analyze code=%s initial=%s has_cache=%s", code, is_initial, bool(cached_evidence))
 
-    # 초기 조회이거나 캐시된 근거가 없으면 collector.py로 새로 수집
-    if is_initial or not cached_evidence or not cached_evidence.get("name"):
+    # 캐시된 근거가 없으면 collector.py로 새로 수집 (프론트 2단계 호출 시 재크롤링 방지)
+    if not cached_evidence or not cached_evidence.get("name"):
         evidence = collect_stock_data(code)
         if not evidence.get("name"):
             err_msg = (evidence.get("errors") or ["종목 정보를 찾을 수 없습니다."])[0]
@@ -122,7 +124,10 @@ def chat_analyze():
         "code": evidence["code"],
         "name": evidence["name"],
         "asset_type": evidence.get("asset_type", "stock"),
+        "market_context": evidence.get("market_context", {}),
         "snapshot": evidence["snapshot"],
+        "tech_summary": evidence.get("tech_summary"),
+        "peers": evidence.get("peers", []),
         "etf_info": evidence.get("etf_info"),
         "investor_trend": evidence.get("investor_trend", []),
         "financials": evidence["financials"],

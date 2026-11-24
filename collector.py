@@ -1,7 +1,9 @@
 import logging
 import os
 import re
+from datetime import datetime, timedelta
 import requests
+import FinanceDataReader as fdr
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -151,19 +153,49 @@ def fetch_integration_info(code, asset_type="stock"):
     total_infos = data.get("totalInfos", [])
     info_map = {item.get("key"): item.get("value") for item in total_infos if item.get("key")}
 
-    # 공통: 최근 5일 투자자별 매매동향 (외국인/기관/개인 순매수량)
+    # 공통: 최근 5일 투자자별 매매동향 (외국인/기관/개인 순매수량 + 억원 환산)
     investor_trend = []
     for item in (data.get("dealTrendInfos") or [])[:5]:
         bizdate = str(item.get("bizdate") or "")
         formatted_date = f"{bizdate[:4]}-{bizdate[4:6]}-{bizdate[6:]}" if len(bizdate) == 8 else bizdate
+        close_p = clean_number(item.get("closePrice"), as_float=False)
+        f_net = clean_number(item.get("foreignerPureBuyQuant"), as_float=False)
+        o_net = clean_number(item.get("organPureBuyQuant"), as_float=False)
+        i_net = clean_number(item.get("individualPureBuyQuant"), as_float=False)
+
+        def _to_eok(qty):
+            if qty is None or close_p is None:
+                return None
+            return round((qty * close_p) / 100_000_000, 1)
+
         investor_trend.append({
             "date": formatted_date,
-            "close_price": clean_number(item.get("closePrice"), as_float=False),
-            "foreigner_net": clean_number(item.get("foreignerPureBuyQuant"), as_float=False),
-            "organ_net": clean_number(item.get("organPureBuyQuant"), as_float=False),
-            "individual_net": clean_number(item.get("individualPureBuyQuant"), as_float=False),
+            "close_price": close_p,
+            "foreigner_net": f_net,
+            "foreigner_eok": _to_eok(f_net),
+            "organ_net": o_net,
+            "organ_eok": _to_eok(o_net),
+            "individual_net": i_net,
+            "individual_eok": _to_eok(i_net),
             "foreigner_ratio": clean_number(item.get("foreignerHoldRatio"), as_float=True),
         })
+
+    # 동일업종 경쟁사 비교 (상위 5개)
+    peers = []
+    for p in (data.get("industryCompareInfo") or [])[:5]:
+        p_code = p.get("itemCode")
+        p_name = p.get("stockName")
+        if p_code and p_name:
+            p_ratio = clean_number(p.get("fluctuationsRatio"), as_float=True)
+            comp_name = (p.get("compareToPreviousPrice") or {}).get("name", "")
+            if p_ratio is not None and comp_name == "FALLING" and p_ratio > 0:
+                p_ratio = -p_ratio
+            peers.append({
+                "code": p_code,
+                "name": p_name,
+                "price": clean_number(p.get("closePrice"), as_float=False),
+                "change_rate": p_ratio,
+            })
 
     if asset_type == "etf":
         etf_ind = data.get("etfKeyIndicator") or {}
@@ -203,7 +235,68 @@ def fetch_integration_info(code, asset_type="stock"):
         "pbr": pbr,
         "etf_info": etf_info,
         "investor_trend": investor_trend,
+        "peers": peers,
     }, None
+
+
+def fetch_market_context():
+    """FinanceDataReader로 오늘의 코스피(KS11), 코스닥(KQ11), 원/달러 환율(USD/KRW)을 조회한다."""
+    start_str = (datetime.today() - timedelta(days=14)).strftime("%Y-%m-%d")
+    symbols = {
+        "kospi": ("KS11", "코스피"),
+        "kosdaq": ("KQ11", "코스닥"),
+        "usd_krw": ("USD/KRW", "원/달러"),
+    }
+    context = {}
+    for key, (sym, label) in symbols.items():
+        try:
+            df = fdr.DataReader(sym, start_str)
+            if df is not None and len(df) >= 2 and "Close" in df.columns:
+                closes = df["Close"].dropna()
+                curr = float(closes.iloc[-1])
+                prev = float(closes.iloc[-2])
+                chg = round(((curr - prev) / prev) * 100, 2) if prev else 0.0
+                context[key] = {
+                    "label": label,
+                    "value": round(curr, 2),
+                    "change_rate": chg,
+                }
+        except Exception as e:
+            logger.warning("[FDR] 시장 지표 조회 실패 (%s): %s", sym, e)
+    return context
+
+
+def build_tech_summary(code):
+    """indicators.py를 재사용해 RSI(14), 볼린저밴드 위치(%), 20일선 이격도(%) 요약을 생성한다."""
+    try:
+        from indicators import calculate_indicators
+        ind = calculate_indicators(code, days=180, display_days=5)
+        if ind.get("error") or not ind.get("latest"):
+            return None
+        latest = ind["latest"]
+        close = latest.get("close")
+        bb_up = latest.get("bb_upper")
+        bb_low = latest.get("bb_lower")
+        ma20 = latest.get("ma20")
+
+        bb_pos = None
+        if close is not None and bb_up is not None and bb_low is not None and (bb_up - bb_low) > 0:
+            bb_pos = round(((close - bb_low) / (bb_up - bb_low)) * 100, 1)
+
+        ma20_gap = None
+        if close is not None and ma20 is not None and ma20 > 0:
+            ma20_gap = round(((close - ma20) / ma20) * 100, 2)
+
+        return {
+            "rsi14": latest.get("rsi14"),
+            "bb_position_pct": bb_pos,
+            "ma20": ma20,
+            "ma20_gap_pct": ma20_gap,
+            "macd": latest.get("macd"),
+        }
+    except Exception as e:
+        logger.warning("[CALC] 기술지표 요약 생성 실패 (code=%s): %s", code, e)
+        return None
 
 
 def fetch_financials(code):
@@ -339,6 +432,9 @@ def collect_stock_data(code):
         },
         "etf_info": None,
         "investor_trend": [],
+        "peers": [],
+        "market_context": {},
+        "tech_summary": None,
         "financials": [],
         "news": [],
         "errors": [],
@@ -371,6 +467,11 @@ def collect_stock_data(code):
         result["snapshot"]["pbr"] = integ_info["pbr"]
         result["etf_info"] = integ_info.get("etf_info")
         result["investor_trend"] = integ_info.get("investor_trend", [])
+        result["peers"] = integ_info.get("peers", [])
+
+    # 거시 시장 환경 (코스피/코스닥/원달러) 및 기술지표 핵심 요약
+    result["market_context"] = fetch_market_context()
+    result["tech_summary"] = build_tech_summary(valid_code)
 
     # ETF는 기업 재무제표(매출액/영업이익)가 없으므로 일반 주식일 때만 조회
     if asset_type != "etf":

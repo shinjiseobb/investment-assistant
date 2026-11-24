@@ -54,8 +54,11 @@
             <span id="tab1-stock-code-badge" class="code-badge">000000</span>
           </div>
 
+          <!-- 오늘의 거시 시장 환경 -->
+          <div id="tab1-market-bar" class="latest-badges" style="margin-bottom: 14px;"></div>
+
           <h4 style="margin-bottom: 10px; color: #374151;">📌 핵심 투자 지표 (Snapshot)</h4>
-          <div class="snapshot-grid" style="margin-bottom: 20px;">
+          <div class="snapshot-grid" style="margin-bottom: 14px;">
             <div class="stat-card">
               <span class="stat-label">현재가</span>
               <strong id="tab1-val-price" class="stat-value">-</strong>
@@ -76,6 +79,15 @@
               <span id="tab1-label-pbr" class="stat-label">PBR</span>
               <strong id="tab1-val-pbr" class="stat-value">-</strong>
             </div>
+          </div>
+
+          <!-- 기술지표 핵심 요약 (RSI, 볼린저 위치 %, 20일선 이격) -->
+          <div id="tab1-tech-summary" class="latest-badges" style="margin-bottom: 18px;"></div>
+
+          <!-- 동일업종 주요 경쟁사 등락률 비교 -->
+          <div id="tab1-peers-box" class="hidden" style="margin-bottom: 18px;">
+            <h4 style="margin-bottom: 8px; color: #374151;">🏢 동일업종 주요 경쟁사 오늘 등락</h4>
+            <div id="tab1-peers-list" class="latest-badges" style="margin-bottom: 0;"></div>
           </div>
 
           <!-- 주식용: 연간 기업실적분석 -->

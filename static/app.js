@@ -74,32 +74,50 @@ document.addEventListener("DOMContentLoaded", () => {
     tab1LoadBtn.disabled = true;
 
     try {
-      const resp = await fetch("/api/chat/analyze", {
+      // 1단계: /fetch 로 네이버·FDR·Serper 근거 데이터 먼저 수집 (Vercel 10초 타임아웃 방어)
+      const fetchResp = await fetch("/fetch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+
+      const evData = await fetchResp.json();
+      if (!evData || !evData.name) {
+        const errMsg = (evData && evData.errors && evData.errors[0]) || "종목 정보를 찾을 수 없습니다.";
+        console.error("[ERROR] 탭1 수집 오류:", errMsg);
+        tab1Error.textContent = `⚠️ ${errMsg}`;
+        tab1Error.classList.remove("hidden");
+        return;
+      }
+
+      tab1EvidenceData = evData;
+      renderTab1Evidence(evData);
+      tab1EvidencePanel.classList.remove("hidden");
+      tab1ChatSection.classList.remove("hidden");
+      tab1Loading.classList.add("hidden");
+
+      // 2단계: 수집된 근거를 넘겨 Dify 애널리스트 리포트 생성
+      const loadingBubble = appendChatMessage(tab1ChatLog, "수집된 데이터를 바탕으로 AI 수석 애널리스트 리포트를 작성 중입니다...", "bot");
+
+      const analyzeResp = await fetch("/api/chat/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           code,
           is_initial: true,
+          evidence: evData,
         }),
       });
 
-      const data = await resp.json();
-
-      if (data.evidence && data.evidence.name) {
-        tab1EvidenceData = data.evidence;
-        renderTab1Evidence(data.evidence);
-        tab1EvidencePanel.classList.remove("hidden");
-        tab1ChatSection.classList.remove("hidden");
-      }
+      const data = await analyzeResp.json();
+      loadingBubble.remove();
 
       if (data.error) {
-        console.error("[ERROR] 탭1 오류 발생:", data.error);
+        console.error("[ERROR] 탭1 AI 분석 오류:", data.error);
         tab1Error.textContent = `⚠️ ${data.error}`;
         tab1Error.classList.remove("hidden");
         if (!data.answer) {
-          if (data.evidence && data.evidence.name) {
-            appendChatMessage(tab1ChatLog, `안내: ${data.error}`, "bot");
-          }
+          appendChatMessage(tab1ChatLog, `안내: ${data.error}`, "bot");
           return;
         }
       }
@@ -171,6 +189,21 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("tab1-stock-name").textContent = ev.name || "-";
     document.getElementById("tab1-stock-code-badge").textContent = ev.code || "-";
 
+    // 오늘의 거시 시장 환경 (코스피, 코스닥, 원/달러)
+    const marketBar = document.getElementById("tab1-market-bar");
+    const mc = ev.market_context || {};
+    const mcItems = [];
+    ["kospi", "kosdaq", "usd_krw"].forEach((k) => {
+      if (mc[k]) {
+        const sign = mc[k].change_rate > 0 ? "+" : "";
+        const color = mc[k].change_rate > 0 ? "#dc2626" : mc[k].change_rate < 0 ? "#2563eb" : "#374151";
+        mcItems.push(
+          `<span class="ind-badge">🌐 ${escapeHtml(mc[k].label)}: ${mc[k].value.toLocaleString("ko-KR")} <span style="color:${color}">(${sign}${mc[k].change_rate}%)</span></span>`
+        );
+      }
+    });
+    marketBar.innerHTML = mcItems.join("");
+
     const snap = ev.snapshot || {};
     document.getElementById("tab1-val-price").textContent =
       snap.current_price != null ? `${snap.current_price.toLocaleString("ko-KR")}원` : "-";
@@ -225,6 +258,41 @@ document.addEventListener("DOMContentLoaded", () => {
 
       etfBox.classList.add("hidden");
       financialsBox.classList.remove("hidden");
+    }
+
+    // 기술지표 핵심 요약 (RSI, 볼린저 위치 %, 20일선 이격)
+    const techSummaryEl = document.getElementById("tab1-tech-summary");
+    const ts = ev.tech_summary;
+    if (ts) {
+      const gapSign = ts.ma20_gap_pct > 0 ? "+" : "";
+      const tsItems = [
+        `📊 RSI(14): ${ts.rsi14 ?? "-"}`,
+        `📈 볼린저밴드 위치: ${ts.bb_position_pct != null ? ts.bb_position_pct + "% (0%=하단, 100%=상단)" : "-"}`,
+        `📏 20일선 이격도: ${ts.ma20_gap_pct != null ? gapSign + ts.ma20_gap_pct + "%" : "-"}`,
+      ];
+      techSummaryEl.innerHTML = tsItems.map((t) => `<span class="ind-badge">${escapeHtml(t)}</span>`).join("");
+    } else {
+      techSummaryEl.innerHTML = "";
+    }
+
+    // 동일업종 경쟁사 비교
+    const peersBox = document.getElementById("tab1-peers-box");
+    const peersList = document.getElementById("tab1-peers-list");
+    const peers = ev.peers || [];
+    if (peers.length > 0) {
+      peersList.innerHTML = peers
+        .map((p) => {
+          const sign = p.change_rate > 0 ? "+" : "";
+          const color = p.change_rate > 0 ? "#dc2626" : p.change_rate < 0 ? "#2563eb" : "#374151";
+          const priceStr = p.price != null ? `${p.price.toLocaleString("ko-KR")}원` : "-";
+          const rateStr = p.change_rate != null ? `${sign}${p.change_rate}%` : "-";
+          return `<span class="ind-badge">${escapeHtml(p.name)} ${priceStr} <span style="color:${color}">(${rateStr})</span></span>`;
+        })
+        .join("");
+      peersBox.classList.remove("hidden");
+    } else {
+      peersBox.classList.add("hidden");
+      peersList.innerHTML = "";
     }
 
     // 연간 실적 테이블 (일반 주식)
@@ -286,23 +354,26 @@ document.addEventListener("DOMContentLoaded", () => {
     } else {
       trends.forEach((t) => {
         const tr = document.createElement("tr");
-        const fmtNet = (val) => {
-          if (val == null) return "-";
-          const sign = val > 0 ? "+" : "";
-          return `${sign}${val.toLocaleString("ko-KR")}`;
+        const fmtNet = (qty, eok) => {
+          if (qty == null) return "-";
+          const sign = qty > 0 ? "+" : "";
+          const qtyStr = `${sign}${qty.toLocaleString("ko-KR")}`;
+          if (eok == null) return qtyStr;
+          const eokSign = eok > 0 ? "+" : "";
+          return `${qtyStr} (${eokSign}${eok.toLocaleString("ko-KR")}억)`;
         };
         const tdDate = document.createElement("td");
         tdDate.textContent = t.date || "-";
         const tdHold = document.createElement("td");
         tdHold.textContent = t.foreigner_ratio != null ? `${t.foreigner_ratio}%` : "-";
         const tdFor = document.createElement("td");
-        tdFor.textContent = fmtNet(t.foreigner_net);
+        tdFor.textContent = fmtNet(t.foreigner_net, t.foreigner_eok);
         tdFor.style.color = t.foreigner_net > 0 ? "#dc2626" : t.foreigner_net < 0 ? "#2563eb" : "";
         const tdOrg = document.createElement("td");
-        tdOrg.textContent = fmtNet(t.organ_net);
+        tdOrg.textContent = fmtNet(t.organ_net, t.organ_eok);
         tdOrg.style.color = t.organ_net > 0 ? "#dc2626" : t.organ_net < 0 ? "#2563eb" : "";
         const tdInd = document.createElement("td");
-        tdInd.textContent = fmtNet(t.individual_net);
+        tdInd.textContent = fmtNet(t.individual_net, t.individual_eok);
         tdInd.style.color = t.individual_net > 0 ? "#dc2626" : t.individual_net < 0 ? "#2563eb" : "";
 
         tr.append(tdDate, tdHold, tdFor, tdOrg, tdInd);
