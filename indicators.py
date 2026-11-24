@@ -3,6 +3,7 @@ import re
 from datetime import datetime, timedelta
 import FinanceDataReader as fdr
 import pandas as pd
+from collector import fetch_basic_info
 
 logger = logging.getLogger(__name__)
 
@@ -102,10 +103,14 @@ def calculate_indicators(code, days=365, display_days=120):
         "bb_lower": bb_lower_list[-1],
     }
 
-    logger.info("[CALC] 기술지표 계산 완료 (code=%s, latest_rsi14=%s, latest_close=%s)", code_str, latest["rsi14"], latest["close"])
+    b_info, _ = fetch_basic_info(code_str)
+    stock_name = b_info["name"] if b_info and b_info.get("name") else code_str
+
+    logger.info("[CALC] 기술지표 계산 완료 (code=%s, name=%s, latest_rsi14=%s, latest_close=%s)", code_str, stock_name, latest["rsi14"], latest["close"])
 
     return {
         "code": code_str,
+        "name": stock_name,
         "dates": dates,
         "close": close_list,
         "ma5": ma5_list,

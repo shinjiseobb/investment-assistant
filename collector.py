@@ -112,21 +112,23 @@ def fetch_basic_info(code):
     if not stock_name:
         return None, "종목명을 파싱하는 데 실패했습니다. 네이버 데이터 구조가 변경되었거나 지원하지 않는 종목입니다."
 
+    asset_type = data.get("stockEndType", "stock")  # 'stock' 또는 'etf'
     current_price = clean_number(data.get("closePrice"), as_float=False)
     change_rate = clean_number(data.get("fluctuationsRatio"), as_float=True)
 
-    logger.info("[PARSE] 기본 정보 파싱 완료 (name=%s, price=%s)", stock_name, current_price)
+    logger.info("[PARSE] 기본 정보 파싱 완료 (name=%s, type=%s, price=%s)", stock_name, asset_type, current_price)
     return {
         "name": stock_name,
+        "asset_type": asset_type,
         "current_price": current_price,
         "change_rate": change_rate,
     }, None
 
 
-def fetch_integration_info(code):
-    """네이버 금융 integration API에서 시가총액, PER, PBR을 가져와 숫자로 정제한다."""
+def fetch_integration_info(code, asset_type="stock"):
+    """네이버 금융 integration API에서 투자정보(주식/ETF)와 최근 5일 투자자별 수급을 가져온다."""
     url = f"https://m.stock.naver.com/api/stock/{code}/integration"
-    logger.info("[NAVER] 네이버 금융 투자정보 API 접근 시작 (url=%s)", url)
+    logger.info("[NAVER] 네이버 금융 투자정보 API 접근 시작 (url=%s, type=%s)", url, asset_type)
 
     try:
         resp = requests.get(url, headers=NAVER_HEADERS, timeout=REQUEST_TIMEOUT)
@@ -149,15 +151,58 @@ def fetch_integration_info(code):
     total_infos = data.get("totalInfos", [])
     info_map = {item.get("key"): item.get("value") for item in total_infos if item.get("key")}
 
-    market_cap = parse_korean_market_cap(info_map.get("시총"))
-    per = clean_number(info_map.get("PER"), as_float=True)
-    pbr = clean_number(info_map.get("PBR"), as_float=True)
+    # 공통: 최근 5일 투자자별 매매동향 (외국인/기관/개인 순매수량)
+    investor_trend = []
+    for item in (data.get("dealTrendInfos") or [])[:5]:
+        bizdate = str(item.get("bizdate") or "")
+        formatted_date = f"{bizdate[:4]}-{bizdate[4:6]}-{bizdate[6:]}" if len(bizdate) == 8 else bizdate
+        investor_trend.append({
+            "date": formatted_date,
+            "close_price": clean_number(item.get("closePrice"), as_float=False),
+            "foreigner_net": clean_number(item.get("foreignerPureBuyQuant"), as_float=False),
+            "organ_net": clean_number(item.get("organPureBuyQuant"), as_float=False),
+            "individual_net": clean_number(item.get("individualPureBuyQuant"), as_float=False),
+            "foreigner_ratio": clean_number(item.get("foreignerHoldRatio"), as_float=True),
+        })
 
-    logger.info("[PARSE] 투자정보 파싱 완료 (market_cap=%s, per=%s, pbr=%s)", market_cap, per, pbr)
+    if asset_type == "etf":
+        etf_ind = data.get("etfKeyIndicator") or {}
+        dev_sign = etf_ind.get("deviationSign") or ""
+        dev_rate = etf_ind.get("deviationRate")
+        if dev_rate is not None and dev_sign == "-":
+            dev_rate = -abs(float(dev_rate))
+
+        etf_info = {
+            "issuer": etf_ind.get("issuerName") or info_map.get("운용사"),
+            "base_index": info_map.get("기초지수"),
+            "nav": clean_number(etf_ind.get("nav") or info_map.get("NAV"), as_float=True),
+            "total_nav": parse_korean_market_cap(etf_ind.get("totalNav")),
+            "deviation_rate": round(float(dev_rate), 2) if dev_rate is not None else None,
+            "total_fee": etf_ind.get("totalFee") if etf_ind.get("totalFee") is not None else clean_number(info_map.get("펀드보수"), as_float=True),
+            "dividend_yield": etf_ind.get("dividendYieldTtm"),
+            "return_1m": etf_ind.get("returnRate1m") if etf_ind.get("returnRate1m") is not None else clean_number(info_map.get("최근 1개월 수익률"), as_float=True),
+            "return_3m": etf_ind.get("returnRate3m") if etf_ind.get("returnRate3m") is not None else clean_number(info_map.get("최근 3개월 수익률"), as_float=True),
+            "return_6m": clean_number(info_map.get("최근 6개월 수익률"), as_float=True),
+            "return_1y": etf_ind.get("returnRate1y") if etf_ind.get("returnRate1y") is not None else clean_number(info_map.get("최근 1년 수익률"), as_float=True),
+            "description": data.get("description") or "",
+        }
+        market_cap = parse_korean_market_cap(etf_ind.get("marketValue") or info_map.get("시총"))
+        per = None
+        pbr = None
+        logger.info("[PARSE] ETF 정보 파싱 완료 (nav=%s, fee=%s, trend=%d)", etf_info["nav"], etf_info["total_fee"], len(investor_trend))
+    else:
+        etf_info = None
+        market_cap = parse_korean_market_cap(info_map.get("시총"))
+        per = clean_number(info_map.get("PER"), as_float=True)
+        pbr = clean_number(info_map.get("PBR"), as_float=True)
+        logger.info("[PARSE] 투자정보 파싱 완료 (market_cap=%s, per=%s, pbr=%s, trend=%d)", market_cap, per, pbr, len(investor_trend))
+
     return {
         "market_cap": market_cap,
         "per": per,
         "pbr": pbr,
+        "etf_info": etf_info,
+        "investor_trend": investor_trend,
     }, None
 
 
@@ -280,10 +325,11 @@ def fetch_serper_news(stock_name, num=5):
 
 
 def collect_stock_data(code):
-    """종목 데이터 수집 통합 함수 (4차: 기본 시세 + 투자정보 + 기업실적분석 + Serper 뉴스)"""
+    """종목 데이터 수집 통합 함수 (주식/ETF 자동 분기 + 최근 5일 수급 + Serper 뉴스)"""
     result = {
         "code": str(code).strip() if code else "",
         "name": None,
+        "asset_type": "stock",
         "snapshot": {
             "current_price": None,
             "change_rate": None,
@@ -291,6 +337,8 @@ def collect_stock_data(code):
             "per": None,
             "pbr": None,
         },
+        "etf_info": None,
+        "investor_trend": [],
         "financials": [],
         "news": [],
         "errors": [],
@@ -308,23 +356,29 @@ def collect_stock_data(code):
         result["errors"].append(err)
         return result
 
+    asset_type = basic_info.get("asset_type", "stock")
     result["name"] = basic_info["name"]
+    result["asset_type"] = asset_type
     result["snapshot"]["current_price"] = basic_info["current_price"]
     result["snapshot"]["change_rate"] = basic_info["change_rate"]
 
-    integ_info, err = fetch_integration_info(valid_code)
+    integ_info, err = fetch_integration_info(valid_code, asset_type=asset_type)
     if err:
         result["errors"].append(err)
     elif integ_info:
         result["snapshot"]["market_cap"] = integ_info["market_cap"]
         result["snapshot"]["per"] = integ_info["per"]
         result["snapshot"]["pbr"] = integ_info["pbr"]
+        result["etf_info"] = integ_info.get("etf_info")
+        result["investor_trend"] = integ_info.get("investor_trend", [])
 
-    financials, err = fetch_financials(valid_code)
-    if err:
-        result["errors"].append(err)
-    else:
-        result["financials"] = financials
+    # ETF는 기업 재무제표(매출액/영업이익)가 없으므로 일반 주식일 때만 조회
+    if asset_type != "etf":
+        financials, err = fetch_financials(valid_code)
+        if err:
+            result["errors"].append(err)
+        else:
+            result["financials"] = financials
 
     # 네이버에서 파싱한 정식 종목명으로 Serper News API 호출
     if result["name"]:
@@ -335,9 +389,11 @@ def collect_stock_data(code):
             result["news"] = news_list
 
     logger.info(
-        "[RESPONSE] 수집 완료 (code=%s, financials=%d, news=%d, errors=%d)",
+        "[RESPONSE] 수집 완료 (code=%s, type=%s, financials=%d, trend=%d, news=%d, errors=%d)",
         result["code"],
+        result["asset_type"],
         len(result["financials"]),
+        len(result["investor_trend"]),
         len(result["news"]),
         len(result["errors"]),
     )

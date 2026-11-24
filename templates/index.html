@@ -39,6 +39,7 @@
           <span>빠른 선택:</span>
           <button type="button" class="example-btn tab1-quick-btn" data-code="000660">SK하이닉스 (000660)</button>
           <button type="button" class="example-btn tab1-quick-btn" data-code="005930">삼성전자 (005930)</button>
+          <button type="button" class="example-btn tab1-quick-btn" data-code="069500">KODEX 200 (069500)</button>
           <button type="button" class="example-btn tab1-quick-btn" data-code="035420">NAVER (035420)</button>
         </div>
         <div id="tab1-error" class="error-box hidden"></div>
@@ -68,29 +69,58 @@
               <strong id="tab1-val-cap" class="stat-value">-</strong>
             </div>
             <div class="stat-card">
-              <span class="stat-label">PER</span>
+              <span id="tab1-label-per" class="stat-label">PER</span>
               <strong id="tab1-val-per" class="stat-value">-</strong>
             </div>
             <div class="stat-card">
-              <span class="stat-label">PBR</span>
+              <span id="tab1-label-pbr" class="stat-label">PBR</span>
               <strong id="tab1-val-pbr" class="stat-value">-</strong>
             </div>
           </div>
 
-          <h4 style="margin-bottom: 10px; color: #374151;">📊 연간 기업실적분석 (Financials)</h4>
-          <div class="table-wrapper" style="margin-bottom: 20px;">
-            <table class="finance-table">
-              <thead>
-                <tr>
-                  <th>기간</th>
-                  <th>구분</th>
-                  <th>매출액</th>
-                  <th>영업이익</th>
-                  <th>ROE (%)</th>
-                </tr>
-              </thead>
-              <tbody id="tab1-finance-tbody"></tbody>
-            </table>
+          <!-- 주식용: 연간 기업실적분석 -->
+          <div id="tab1-financials-box">
+            <h4 style="margin-bottom: 10px; color: #374151;">📊 연간 기업실적분석 (Financials)</h4>
+            <div class="table-wrapper" style="margin-bottom: 20px;">
+              <table class="finance-table">
+                <thead>
+                  <tr>
+                    <th>기간</th>
+                    <th>구분</th>
+                    <th>매출액</th>
+                    <th>영업이익</th>
+                    <th>ROE (%)</th>
+                  </tr>
+                </thead>
+                <tbody id="tab1-finance-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- ETF용: 기간별 수익률 및 상품 개요 -->
+          <div id="tab1-etf-box" class="hidden" style="margin-bottom: 20px;">
+            <h4 style="margin-bottom: 10px; color: #374151;">🧭 ETF 기간별 수익률 및 상품 개요</h4>
+            <div id="tab1-etf-returns" class="latest-badges" style="margin-bottom: 10px;"></div>
+            <p id="tab1-etf-desc" style="font-size: 0.88rem; color: #4b5563; background: #f9fafb; padding: 12px; border-radius: 8px; border: 1px solid #e5e7eb;"></p>
+          </div>
+
+          <!-- 공통: 최근 5일 투자자별 매매동향 (수급) -->
+          <div id="tab1-trend-box" style="margin-bottom: 20px;">
+            <h4 style="margin-bottom: 10px; color: #374151;">🏦 최근 5일 투자자별 매매동향 (수급)</h4>
+            <div class="table-wrapper">
+              <table class="finance-table">
+                <thead>
+                  <tr>
+                    <th>일자</th>
+                    <th>외국인 보유율</th>
+                    <th>외국인 순매수</th>
+                    <th>기관 순매수</th>
+                    <th>개인 순매수</th>
+                  </tr>
+                </thead>
+                <tbody id="tab1-trend-tbody"></tbody>
+              </table>
+            </div>
           </div>
 
           <h4 style="margin-bottom: 10px; color: #374151;">📰 최신 관련 뉴스 (Serper News API)</h4>

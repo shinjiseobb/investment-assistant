@@ -187,10 +187,47 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     document.getElementById("tab1-val-cap").textContent = formatKoreanCurrency(snap.market_cap);
-    document.getElementById("tab1-val-per").textContent = snap.per != null ? `${snap.per}배` : "-";
-    document.getElementById("tab1-val-pbr").textContent = snap.pbr != null ? `${snap.pbr}배` : "-";
 
-    // 연간 실적 테이블
+    const labelPer = document.getElementById("tab1-label-per");
+    const labelPbr = document.getElementById("tab1-label-pbr");
+    const valPer = document.getElementById("tab1-val-per");
+    const valPbr = document.getElementById("tab1-val-pbr");
+    const financialsBox = document.getElementById("tab1-financials-box");
+    const etfBox = document.getElementById("tab1-etf-box");
+
+    if (ev.asset_type === "etf" && ev.etf_info) {
+      const etf = ev.etf_info;
+      labelPer.textContent = "NAV (괴리율)";
+      valPer.textContent = etf.nav != null ? `${etf.nav.toLocaleString("ko-KR")}원 (${etf.deviation_rate ?? "-"}%)` : "-";
+      labelPbr.textContent = "펀드보수 / 분배금";
+      valPbr.textContent = `${etf.total_fee ?? "-"}% / ${etf.dividend_yield ?? "-"}%`;
+
+      financialsBox.classList.add("hidden");
+      etfBox.classList.remove("hidden");
+
+      const badges = [
+        `기초지수: ${etf.base_index || "-"}`,
+        `운용사: ${etf.issuer || "-"}`,
+        `1개월: ${etf.return_1m != null ? etf.return_1m + "%" : "-"}`,
+        `3개월: ${etf.return_3m != null ? etf.return_3m + "%" : "-"}`,
+        `6개월: ${etf.return_6m != null ? etf.return_6m + "%" : "-"}`,
+        `1년: ${etf.return_1y != null ? etf.return_1y + "%" : "-"}`,
+      ];
+      document.getElementById("tab1-etf-returns").innerHTML = badges
+        .map((b) => `<span class="ind-badge">${escapeHtml(b)}</span>`)
+        .join("");
+      document.getElementById("tab1-etf-desc").textContent = etf.description || "상품 설명이 없습니다.";
+    } else {
+      labelPer.textContent = "PER";
+      valPer.textContent = snap.per != null ? `${snap.per}배` : "-";
+      labelPbr.textContent = "PBR";
+      valPbr.textContent = snap.pbr != null ? `${snap.pbr}배` : "-";
+
+      etfBox.classList.add("hidden");
+      financialsBox.classList.remove("hidden");
+    }
+
+    // 연간 실적 테이블 (일반 주식)
     const tbody = document.getElementById("tab1-finance-tbody");
     tbody.innerHTML = "";
     const financials = ev.financials || [];
@@ -231,6 +268,45 @@ document.addEventListener("DOMContentLoaded", () => {
 
         tr.append(tdPeriod, tdType, tdRev, tdOp, tdRoe);
         tbody.appendChild(tr);
+      });
+    }
+
+    // 공통: 최근 5일 투자자별 매매동향 (수급)
+    const trendTbody = document.getElementById("tab1-trend-tbody");
+    trendTbody.innerHTML = "";
+    const trends = ev.investor_trend || [];
+    if (trends.length === 0) {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 5;
+      td.style.textAlign = "center";
+      td.textContent = "수급 데이터가 없습니다.";
+      tr.appendChild(td);
+      trendTbody.appendChild(tr);
+    } else {
+      trends.forEach((t) => {
+        const tr = document.createElement("tr");
+        const fmtNet = (val) => {
+          if (val == null) return "-";
+          const sign = val > 0 ? "+" : "";
+          return `${sign}${val.toLocaleString("ko-KR")}`;
+        };
+        const tdDate = document.createElement("td");
+        tdDate.textContent = t.date || "-";
+        const tdHold = document.createElement("td");
+        tdHold.textContent = t.foreigner_ratio != null ? `${t.foreigner_ratio}%` : "-";
+        const tdFor = document.createElement("td");
+        tdFor.textContent = fmtNet(t.foreigner_net);
+        tdFor.style.color = t.foreigner_net > 0 ? "#dc2626" : t.foreigner_net < 0 ? "#2563eb" : "";
+        const tdOrg = document.createElement("td");
+        tdOrg.textContent = fmtNet(t.organ_net);
+        tdOrg.style.color = t.organ_net > 0 ? "#dc2626" : t.organ_net < 0 ? "#2563eb" : "";
+        const tdInd = document.createElement("td");
+        tdInd.textContent = fmtNet(t.individual_net);
+        tdInd.style.color = t.individual_net > 0 ? "#dc2626" : t.individual_net < 0 ? "#2563eb" : "";
+
+        tr.append(tdDate, tdHold, tdFor, tdOrg, tdInd);
+        trendTbody.appendChild(tr);
       });
     }
 
@@ -324,6 +400,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("reb-sharpe").textContent = m.sharpe_ratio != null ? `${m.sharpe_ratio}` : "-";
 
     const weights = data.optimal_weights || {};
+    const names = data.names || {};
     const labels = Object.keys(weights);
     const values = Object.values(weights);
     const palette = ["#2563eb", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"];
@@ -333,7 +410,7 @@ document.addEventListener("DOMContentLoaded", () => {
     rebalancePieChart = new Chart(pieCtx, {
       type: "doughnut",
       data: {
-        labels: labels.map((code, i) => `${code} (${values[i]}%)`),
+        labels: labels.map((code, i) => `${names[code] || code} (${code}) - ${values[i]}%`),
         datasets: [
           {
             data: values,
@@ -434,7 +511,7 @@ document.addEventListener("DOMContentLoaded", () => {
       tab3LatestIndicators = data.latest;
 
       console.log(`[INDICATOR] 탭3 기술지표 계산 완료 (code=${code})`);
-      renderTechBadges(data.latest);
+      renderTechBadges(data.latest, data.name || code);
       renderTechCharts(data);
       tab3Content.classList.remove("hidden");
     } catch (err) {
@@ -447,9 +524,10 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  function renderTechBadges(latest) {
+  function renderTechBadges(latest, stockName) {
     if (!latest) return;
     const items = [
+      `종목: ${stockName || "-"}`,
       `기준일: ${latest.date}`,
       `종가: ${latest.close != null ? latest.close.toLocaleString("ko-KR") + "원" : "-"}`,
       `MA5: ${latest.ma5 != null ? latest.ma5.toLocaleString("ko-KR") : "-"}`,

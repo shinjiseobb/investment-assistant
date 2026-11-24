@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import FinanceDataReader as fdr
 import numpy as np
 import pandas as pd
+from collector import fetch_basic_info
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +125,12 @@ def calculate_rebalance(raw_codes, num_simulations=3000):
         for i in range(0, num_simulations, step)
     ]
 
+    # 종목명 매핑 조회 (실패 시 종목코드 그대로 사용)
+    names = {}
+    for code in codes:
+        b_info, _ = fetch_basic_info(code)
+        names[code] = b_info["name"] if b_info and b_info.get("name") else code
+
     logger.info(
         "[CALC] 몬테카를로/프론티어 계산 완료 (codes=%s, sharpe=%s, optimal=%s)",
         codes,
@@ -133,6 +140,7 @@ def calculate_rebalance(raw_codes, num_simulations=3000):
 
     return {
         "codes": codes,
+        "names": names,
         "optimal_weights": optimal_weights,
         "metrics": metrics,
         "frontier_points": frontier_points,

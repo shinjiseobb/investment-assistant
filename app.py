@@ -77,11 +77,15 @@ def fetch():
 
 
 EXPERT_ANALYSIS_PROMPT = """당신은 여의도 수석 애널리스트입니다.
-제공된 [분석 근거 데이터](네이버 금융 시세·투자지표·연간실적, Serper 최신 뉴스)만을 근거로 사용하여 다음 4가지 항목으로 구조화된 종목 심층 분석 리포트를 마크다운 형식으로 작성해 주세요.
+제공된 [분석 근거 데이터](네이버 금융 시세·투자지표·수급·실적/ETF정보, Serper 최신 뉴스)만을 근거로 사용하여 다음 4가지 항목으로 구조화된 심층 분석 리포트를 마크다운 형식으로 작성해 주세요.
 (없는 숫자를 지어내지 말고, 추정치(is_consensus=true)는 반드시 '추정치'임을 명시하세요.)
 
-1. **현재 주가 및 밸류에이션 진단** (현재가, 등락률, 시가총액, PER·PBR 수준 해석)
-2. **연간 실적 성장성 및 수익성 추이** (매출액·영업이익·ROE 흐름 및 추정치 포함)
+1. **현재 주가 및 밸류에이션 / 상품 진단**
+   - 일반 주식(`asset_type=stock`)이면 현재가, 등락률, 시가총액, PER·PBR 수준을 해석하세요.
+   - ETF(`asset_type=etf`)이면 현재가, 등락률, 시가총액, NAV, 괴리율, 펀드보수, 분배금 수익률, 기초지수를 해석하세요.
+2. **실적 추이 / ETF 성과 및 투자자별 수급(최근 5일)**
+   - 일반 주식은 매출액·영업이익·ROE 추이(추정치 포함), ETF는 1·3·6·12개월 기간별 수익률 흐름을 설명하세요.
+   - 공통적으로 최근 5거래일 외국인·기관·개인 순매수 동향(`investor_trend`)을 반드시 짚어주세요.
 3. **최신 뉴스 및 핵심 모멘텀** (수집된 뉴스 기반 주요 이슈 요약)
 4. **종합 의견 및 유의할 리스크 요인**"""
 
@@ -117,7 +121,10 @@ def chat_analyze():
     context_summary = {
         "code": evidence["code"],
         "name": evidence["name"],
+        "asset_type": evidence.get("asset_type", "stock"),
         "snapshot": evidence["snapshot"],
+        "etf_info": evidence.get("etf_info"),
+        "investor_trend": evidence.get("investor_trend", []),
         "financials": evidence["financials"],
         "news": evidence["news"],
     }
